@@ -56,6 +56,10 @@ export interface FText { x: number; y: number; text: string; color: string; life
 export interface Grenade { x: number; y: number; z: number; vx: number; vy: number; vz: number; fuse: number; spin: number; kind: ThrowableId; egg?: boolean }
 export interface Smoke { x: number; y: number; r: number; t: number; dur: number; pulse: number }
 export interface FireZone { x: number; y: number; r: number; t: number; dur: number; tick: number; hostile?: boolean }
+export interface BossBurst {
+  kind: 'frost' | 'coins';
+  x: number; y: number; range: number; age: number; duration: number;
+}
 export interface Light { x: number; y: number; r: number; color: string; life: number; max: number }
 export interface Decal { x: number; y: number; r: number; rot: number }
 export interface Beam { x: number; y: number; color: string; life: number; max: number }
@@ -141,6 +145,7 @@ export class Game {
   enemies: Enemy[] = [];
   bullets: Bullet[] = [];
   particles: Particle[] = [];
+  bossBursts: BossBurst[] = [];
   texts: FText[] = [];
   containers: Container[] = [];
   grenades: Grenade[] = [];
@@ -167,6 +172,8 @@ export class Game {
   kit: Loadout = LOADOUTS[0];
   private warehouseGear?: RaidGear;
   boss: Enemy | null = null;
+  gauntletStage = 0;
+  private gauntletBossIds = new Set<number>();
   bossSeen = false;
   private engagedBossIds = new Set<number>();
   zoneName = '';
@@ -178,7 +185,7 @@ export class Game {
   training = false;
   bagOpen = false;
   mapId: RaidMapId = 'island';
-  get timeLimit() { return this.training ? 150 : RAID_TIME; }
+  get timeLimit() { return this.training ? 150 : this.map.raidTime ?? RAID_TIME; }
   booms: { x: number; y: number; t: number; r: number; dmg: number; hostile?: boolean }[] = [];
   mines: BossMine[] = [];
   icewalls: Icewall[] = [];
@@ -236,7 +243,13 @@ export class Game {
     this.input.interactVisible = false;
     this.dodgeT = 0; this.bufRoll = 0; this.bufHeal = 0; this.bufNade = 0;
     this.t = 0;
+    this.gauntletStage = 0;
+    this.gauntletBossIds.clear();
+    const openedGates = this.map.solids.filter(solid => solid.kind === 'raid_gate' && solid.dead);
+    for (const gate of openedGates) gate.dead = false;
+    if (openedGates.length) this.nav = new Nav(this.map.w, this.map.h, this.grid);
     this.enemies = []; this.bullets = []; this.particles = []; this.texts = []; this.containers = [];
+    this.bossBursts.length = 0;
     this.grenades = []; this.smokes = []; this.fires = []; this.lights = []; this.decals = []; this.beams = []; this.msgs = []; this.dmgInds = []; this.booms = [];
     this.mines = []; this.icewalls = [];
     this.banner = null; this.exZone = null; this.exProg = 0; this.exWaves.clear(); this.search = null; this.nearC = null;
@@ -351,21 +364,26 @@ export class Game {
     const ex = this.map.extractions.map((e) => ({ e, d: Math.hypot(e.x - sp.x, e.y - sp.y) }));
     let cands = shuffle(ex.filter((o) => o.d > 1300));
     if (cands.length < 2) cands = ex.sort((a, b) => b.d - a.d);
-    this.extracts = cands.slice(0, 2).map((o) => ({ ...o.e }));
+    const gauntlet = this.map.gauntlet;
+    this.extracts = gauntlet ? [] : cands.slice(0, 2).map((o) => ({ ...o.e }));
     for (const s of this.map.enemySpots) {
+      if (gauntlet && ENEMIES[s.type].boss) continue;
       const d = Math.hypot(s.x - sp.x, s.y - sp.y);
       if (mapId === 'island' && !ENEMIES[s.type].boss && (d < 720 || Math.random() < 0.15)) continue;
       if (s.type === 'chicken') this.spawnPack(s.x, s.y, s.n);
       else this.spawnEnemy(s.type, s.x, s.y, 'idle');
     }
-    this.spawnPack(sp.chick[0], sp.chick[1], mapId === 'island' ? 3 : 2);
+    if (gauntlet) this.spawnGauntletStage();
+    else this.spawnPack(sp.chick[0], sp.chick[1], mapId === 'island' ? 3 : 2);
     this.waveT = 50;
     this.nav.compute(p.x, p.y);
     this.navT = 0.3;
     this.cam.x = p.x; this.cam.y = p.y;
-    this.banner = { text: getRaidMap(mapId).name, sub: '行动开始 · 搜刮物资，活着撤离', color: '#ffd23f', t: 0, dur: 2.6 };
+    const firstStage = gauntlet?.[0];
+    this.banner = { text: getRaidMap(mapId).name, sub: firstStage ? `前往${firstStage.name} · ${firstStage.direction}` : '行动开始 · 搜刮物资，活着撤离', color: '#ffd23f', t: 0, dur: 2.6 };
     this.tutorialT = 10;
-    this.msg(`撤离点：${this.extracts.map((e) => e.name).join(' / ')}`, '#6dff9e');
+    this.msg(gauntlet ? '宝库、御花园和撤离点将在双首领击败后开放'
+      : `撤离点：${this.extracts.map((e) => e.name).join(' / ')}`, '#6dff9e');
     this.sfx.play('deploy');
   }
 
@@ -1175,11 +1193,43 @@ export class Game {
     return enc?.skillCycle?.[e.castCount % enc.skillCycle.length] ?? enc?.skill ?? 'slam';
   }
 
+  private spawnGauntletStage() {
+    const stage = this.map.gauntlet?.[this.gauntletStage];
+    if (!stage) return;
+    for (const spot of this.map.enemySpots) {
+      if (stage.bosses.includes(spot.type)) this.gauntletBossIds.add(this.spawnEnemy(spot.type, spot.x, spot.y).id);
+    }
+    for (const guard of stage.guards) this.spawnEnemy(guard.type, guard.x, guard.y);
+  }
+
+  private advanceGauntlet(e: Enemy): string | undefined {
+    const stages = this.map.gauntlet;
+    if (!stages || !this.gauntletBossIds.delete(e.id)) return;
+    if (this.gauntletBossIds.size) return '击败另一位首领才会解除王家封印';
+    for (const gate of this.map.solids) {
+      if (gate.kind === 'raid_gate' && gate.v === this.gauntletStage) gate.dead = true;
+    }
+    this.gauntletStage++;
+    this.nav = new Nav(this.map.w, this.map.h, this.grid);
+    this.nav.compute(this.player.x, this.player.y);
+    if (this.gauntletStage < stages.length) {
+      this.spawnGauntletStage();
+      const next = stages[this.gauntletStage];
+      return `下一站：${next.name} · ${next.direction}`;
+    }
+    this.extracts = this.map.extractions.map(exit => ({ ...exit }));
+    return '王家宝库、御花园和撤离点已开放';
+  }
+
   private engageBoss(e: Enemy) {
     this.boss = e;
     // Each boss of a dual encounter receives its own entrance warning.
     if (this.engagedBossIds.has(e.id)) return;
     this.engagedBossIds.add(e.id);
+    if (this.gauntletBossIds.has(e.id)) {
+      const reinforcements = this.map.gauntlet?.[this.gauntletStage]?.reinforcements[e.type];
+      for (const unit of reinforcements ?? []) this.spawnHunter(unit.type, unit.x, unit.y);
+    }
     this.bossSeen = true;
     const skill = this.bossSkill(e);
     const bossColor = e.def.encounter?.ringColor
@@ -1226,13 +1276,15 @@ export class Game {
     const items = this.rollBody(e);
     this.containers.push({ id: this.nextId++, type: 'body', name: `${e.def.name}的遗体`, x: e.x, y: e.y, w: e.r * 2, h: e.r * 2, items, revealed: 0, body: true, etype: e.type, angle: Math.atan2(ny, nx), open: 0, shake: 0 });
     if (e.def.boss) {
+      const stageMessage = this.advanceGauntlet(e);
       if (this.boss?.id === e.id) {
-        this.boss = this.enemies.find((o) => o.def.boss && !o.dead && o.id !== e.id) ?? null;
+        this.boss = this.enemies.find((o) => o.def.boss && !o.dead && o.id !== e.id &&
+          (!this.map.gauntlet || this.engagedBossIds.has(o.id))) ?? null;
       }
       const bossesLeft = this.enemies.filter((o) => o.def.boss && !o.dead).length;
       this.banner = {
         text: `击败 ${e.def.name}！`,
-        sub: bossesLeft ? `还有 ${bossesLeft} 名首领存活` : '搜刮它的遗体获取顶级物资',
+        sub: stageMessage ?? (bossesLeft ? `还有 ${bossesLeft} 名首领存活` : '搜刮它的遗体获取顶级物资'),
         color: '#ffb93b', t: 0, dur: 2.8,
       };
       this.slowT = 0.9; this.slowScale = 0.3;
@@ -1594,8 +1646,8 @@ export class Game {
   private updateWaves() {
     const p = this.player;
     if (p.dead) return;
-    if (this.waveT <= 0) {
-      const frac = this.t / RAID_TIME;
+    if (!this.map.gauntlet && this.waveT <= 0) {
+      const frac = this.t / this.timeLimit;
       this.waveT = 56 - frac * 24 + Math.random() * 10;
       const n = 2 + (this.t > 120 ? 1 : 0) + (this.t > 240 ? 1 : 0);
       if (this.spawnSquad(p.x, p.y, n, 850, 1700)) {
@@ -1603,7 +1655,7 @@ export class Game {
         this.sfx.play('alarm');
       }
     }
-    if (!this.warned60 && RAID_TIME - this.t < 60) {
+    if (!this.warned60 && this.timeLimit - this.t < 60) {
       this.warned60 = true;
       this.banner = { text: '剩余 60 秒', sub: '尽快前往撤离点！', color: '#ff6b5c', t: 0, dur: 2.4 };
       this.sfx.play('alarm');
@@ -2051,6 +2103,10 @@ export class Game {
     const skill = this.bossSkill(e);
     const phase = enc?.phases[e.skillPhase];
     const range = phase?.range ?? 290;
+    if (e.type === 'frostMarshal' || e.type === 'duckKing') {
+      const frost = e.type === 'frostMarshal';
+      this.bossBursts.push({ kind: frost ? 'frost' : 'coins', x: e.x, y: e.y, range, age: 0, duration: frost ? 1.05 : 1.26 });
+    }
     this.sfx.play('honk', e.x, e.y, 1.3);
     // Each boss reads differently: pulse = chill/heat ring, slam = ground shockwave.
     const tint = enc?.ringColor ?? (skill === 'pulse' ? 'rgba(208,103,47,0.68)' : 'rgba(166,131,73,0.60)');
@@ -2525,6 +2581,11 @@ export class Game {
   // ---------------------------------------------------------------- fx & camera
   private updateFx(dt: number, rawDt: number) {
     this.waveT -= dt;
+    for (let i = this.bossBursts.length - 1; i >= 0; i--) {
+      const burst = this.bossBursts[i];
+      burst.age += dt;
+      if (burst.age >= burst.duration) this.bossBursts.splice(i, 1);
+    }
     const ps = this.particles;
     for (let i = ps.length - 1; i >= 0; i--) {
       const q = ps[i];

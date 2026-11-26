@@ -1,4 +1,4 @@
-import { CONTAINER_DEFS, MAP_H, MAP_W, type EnemyType } from './data';
+import { CONTAINER_DEFS, ENEMIES, MAP_H, MAP_W, type EnemyType } from './data';
 
 export const F_MOVE = 1;
 export const F_BULLET = 2;
@@ -22,15 +22,26 @@ export interface Solid {
 
 export type FloorType = 'wood' | 'tile' | 'concrete';
 interface DoorPassage { x: number; y: number; hw: number; hh: number }
-export interface Floor { x: number; y: number; w: number; h: number; type: FloorType; name: string; roofed: boolean; doors?: DoorPassage[]; wallInset?: number }
+export type HallTheme = 'air' | 'radar' | 'frost' | 'guard' | 'royal';
+export interface Floor { x: number; y: number; w: number; h: number; type: FloorType; name: string; roofed: boolean; doors?: DoorPassage[]; wallInset?: number; theme?: HallTheme }
 export const ROAD_EDGE_WIDTH = 69;
+export const ROYAL_PLAZA_BORDER_WIDTH = 13;
 const ROAD_SETBACK = ROAD_EDGE_WIDTH / 2 + .5;
 export interface Decor { x: number; y: number; t: number; s: number; c: number; rot: number }
-export interface Tree { x: number; y: number; r: number; v: number; solid: boolean }
+export interface Tree { x: number; y: number; r: number; v: number; solid: boolean; kind?: 'mushroom' | 'cedar' | 'broadleaf' }
 export interface ContainerSpot { type: string; x: number; y: number; fixedItem?: string }
 export interface ExtractDef { id: string; name: string; x: number; y: number; r: number }
 export interface SpawnDef { x: number; y: number; chick: [number, number] }
 export interface EnemySpot { type: EnemyType; x: number; y: number; n: number }
+interface GauntletUnit { type: EnemyType; x: number; y: number }
+interface GauntletStage {
+  name: string;
+  bosses: readonly EnemyType[];
+  direction: string;
+  entrance: { x: number; y: number };
+  guards: readonly GauntletUnit[];
+  reinforcements: Partial<Record<EnemyType, readonly GauntletUnit[]>>;
+}
 export interface Pad { type: string; x: number; y: number; w: number; h: number }
 export interface Zone { name: string; x: number; y: number; w: number; h: number }
 
@@ -49,12 +60,14 @@ export interface SceneryProp {
       | 'ice_block' | 'ice_crystal' | 'fighter_jet' | 'lava_pool' | 'lava_fissure' | 'basalt_spires' | 'steam_vent'
       | 'rope_coil' | 'buoy' | 'pipe_run' | 'cargo_net' | 'ingot_stack' | 'spore_pod' | 'cattail'
       | 'well' | 'bus_stop' | 'signpost' | 'laundry_line' | 'royal_lantern' | 'rune_pillar' | 'stone_lion'
-      | 'royal_flagpole' | 'castle_steps'
+      | 'royal_flagpole' | 'royal_flowerbed' | 'palace_fountain' | 'greek_column' | 'triumphal_arch'
+      | 'castle_steps' | 'wall_rubble'
       | 'king_vault_gate' | 'checkpoint_gate' | 'water_barrier' | 'striped_barricade'
       | 'freight_boxcar' | 'freight_flatcar'
       | 'hangar' | 'fighter_jet_parked' | 'furnace_vent' | 'frost_pylon' | 'snow_drift'
       | 'stone_bridge' | 'radar_station' | 'missile_rack' | 'sandbag_wall' | 'fuel_tank'
-      | 'antenna_mast' | 'street_lamp' | 'transport_plane' | 'parked_jeep';
+      | 'antenna_mast' | 'street_lamp' | 'transport_plane' | 'parked_jeep' | 'outpost_tank'
+      | 'outpost_aav' | 'outpost_btr';
   x: number;
   y: number;
   rot: number;
@@ -63,6 +76,8 @@ export interface SceneryProp {
   width?: number;
   /** Optional body paint for modular assets such as rail cars. */
   paint?: string;
+  /** Explicit opt-out for scenery that must never become cover. */
+  solid?: false;
 }
 
 export interface GameMap {
@@ -83,6 +98,8 @@ export interface GameMap {
   reinforce: { x: number; y: number }[];
   zones: Zone[];
   tracks: number[];
+  raidTime?: number;
+  gauntlet?: readonly GauntletStage[];
 }
 
 export type RaidMapId = 'island' | 'harbor' | 'foundry' | 'hatchery' | 'outpost' | 'mausoleum' | 'airbase';
@@ -108,7 +125,8 @@ export const RAID_MAPS: readonly RaidMapDef[] = [
   { id: 'hatchery', name: '腐叶孵化场', requiredExtracts: 5, theme: '沼泽育雏棚、孵化控制室与巢穴', loot: '巢穴补给、冰风 MP9 与鸭后金蛋', boss: 'broodQueen', difficulty: '精英 · 持续召怪', build: buildHatchery },
   { id: 'outpost', name: '霜锋哨站', requiredExtracts: 8, theme: '冰封机库、雷达站与冻土广场', loot: '军械库、传说枪械与双首领战利品', boss: 'frostMarshal', bosses: ['frostMarshal', 'ironGuard'], difficulty: '噩梦 · 双首领', build: buildOutpost },
   { id: 'airbase', name: '冰火空军基地', requiredExtracts: 10, theme: '熔岩焦土、冰霜雪原与中央跑道', loot: '机库军械、双传说保险箱与 RPG', boss: 'flameAce', bosses: ['flameAce', 'radarWarden'], difficulty: '噩梦 · 冰火双首领', build: buildAirbase },
-  { id: 'mausoleum', name: '鸭王陵寝', requiredExtracts: 12, theme: '王陵回廊、双宝库与王座大厅', loot: '双宝库至臻物资、RPG 与鸭王御座', boss: 'duckKing', difficulty: '地狱 · 四招轮换', build: buildMausoleum },
+  { id: 'mausoleum', name: '鸭王陵寝', requiredExtracts: 12, theme: '四将军试炼、双王城堡与封印御花园', loot: '击败六名首领后开放王家宝库与御花园', boss: 'duckKing',
+    bosses: ['frostMarshal', 'ironGuard', 'flameAce', 'radarWarden', 'broodQueen', 'duckKing'], difficulty: '地狱 · 六首领', build: buildMausoleum },
 ];
 
 export function getRaidMap(id: RaidMapId): RaidMapDef {
@@ -199,6 +217,8 @@ export function buildTrainingMap(): GameMap {
 type Cover = [kind: 'wall' | 'castle_wall' | 'cargo' | 'train' | 'rack' | 'car' | 'fence' | 'pump', x: number, y: number, w: number, h: number];
 
 interface RoomDef {
+  theme?: HallTheme;
+  doorWidth?: number;
   name: string;
   x: number; y: number; w: number; h: number;
   floor: FloorType;
@@ -246,7 +266,8 @@ const PROP_FOOTPRINT: Partial<Record<SceneryProp['kind'], [number, number]>> = {
   delivery_truck: [34, 54], pickup_truck: [34, 52], dump_truck: [34, 54], container_truck: [36, 56], flatbed: [32, 48],
   rowboat: [32, 56], fishing_boat: [32, 58], speedboat: [32, 58],
   barrels: [36, 36], bollard: [28, 22], crane: [60, 30],
-  fountain: [50, 36], duck_king_statue: [46, 56], billboard: [46, 42], vending_machine: [28, 58],
+  fountain: [50, 36], duck_king_statue: [46, 56], royal_flowerbed: [54, 25], billboard: [46, 42], vending_machine: [28, 58],
+  palace_fountain: [75, 55], greek_column: [24, 24], triumphal_arch: [126, 38],
   bed: [44, 50], table_map_cup: [40, 40], table_field_kit: [40, 40], wood_chair: [30, 34],
   bedside_cabinet: [30, 32], potted_flower: [30, 36], egg_nest: [30, 28], ice_beacon: [28, 52],
   wood_table: [54, 48], wood_bench: [52, 40], bar_stool: [34, 30], metal_workbench: [50, 44],
@@ -258,7 +279,8 @@ const PROP_FOOTPRINT: Partial<Record<SceneryProp['kind'], [number, number]>> = {
   snow_drift: [40, 30], stone_bridge: [56, 40], radar_station: [44, 44], missile_rack: [30, 34],
   wood_bridge: [110, 32], water_bucket: [17, 17], trash_bin: [17, 17], mailbox: [14, 14], bench_park: [28, 18], signpost: [26, 9],
   sandbag_wall: [44, 30], fuel_tank: [36, 40], antenna_mast: [22, 22], street_lamp: [20, 20],
-  transport_plane: [87, 82], parked_jeep: [36, 44],
+  transport_plane: [87, 82], parked_jeep: [36, 44], outpost_tank: [82, 37],
+  outpost_aav: [63, 36], outpost_btr: [63, 40],
   checkpoint_gate: [61, 13], water_barrier: [35, 13], striped_barricade: [32, 12],
   freight_boxcar: [83, 21], freight_flatcar: [83, 21],
 };
@@ -375,6 +397,7 @@ function withAssetCollisions(map: GameMap): GameMap {
     ...map.reinforce.map(({ x, y }) => ({ x, y, r: 25 })),
   ];
   const props = map.props.flatMap((prop) => {
+    if (prop.solid === false) return [prop];
     const footprint = PROP_COLLISION_FOOTPRINT[prop.kind];
     if (!footprint) return [prop];
     const onRail = prop.kind === 'freight_boxcar' || prop.kind === 'freight_flatcar';
@@ -586,7 +609,7 @@ function connectBuildingRoads(roads: number[][], floors: Floor[], water: GameMap
 /** Add deterministic, non-blocking ground art without covering routes or combat landmarks. */
 function withBiomeArt(map: GameMap, biome: BiomeStyle): GameMap {
   clearDoorCover(map);
-  map.roads = connectBuildingRoads(map.roads, map.floors, map.water, map.solids);
+  if (!map.gauntlet) map.roads = connectBuildingRoads(map.roads, map.floors, map.water, map.solids);
   separateContainersFromProps(map);
   const settings: { seed: number; count: number } = {
     harbor: { seed: 31, count: 70 }, foundry: { seed: 47, count: 85 },
@@ -608,10 +631,18 @@ function withBiomeArt(map: GameMap, biome: BiomeStyle): GameMap {
     }
     return Math.max(0, Math.hypot(x - water.x, y - water.y) - water.r);
   }));
-  const blocked = (x: number, y: number, pad: number) => {
+  const blocked = (x: number, y: number, pad: number, allowDecorativeSurfaces = false) => {
     if (x < 36 || y < 36 || x > map.w - 36 || y > map.h - 36) return true;
-    if (map.floors.some((f) => x > f.x - pad && x < f.x + f.w + pad && y > f.y - pad && y < f.y + f.h + pad)) return true;
-    if (map.pads.some((p) => p.type !== 'field' && x > p.x - pad && x < p.x + p.w + pad && y > p.y - pad && y < p.y + p.h + pad)) return true;
+    if (map.floors.some((f) => {
+      if (allowDecorativeSurfaces && ['孵化中庭', '冰封中庭东场', '冰封中庭南岸', '冰霜雪原'].includes(f.name)) return false;
+      const margin = pad + (allowDecorativeSurfaces ? f.wallInset ?? 0 : 0);
+      return x > f.x - margin && x < f.x + f.w + margin && y > f.y - margin && y < f.y + f.h + margin;
+    })) return true;
+    if (map.pads.some((p) => {
+      if (p.type === 'field' || (allowDecorativeSurfaces && (p.type === 'nest_ground' ||
+        (biome === 'outpost' && p.type === 'base' && p.w === 780 && p.h === 340)))) return false;
+      return x > p.x - pad && x < p.x + p.w + pad && y > p.y - pad && y < p.y + p.h + pad;
+    })) return true;
     if (map.solids.some((s) => {
       if (s.kind === 'bound' || !(s.f & F_MOVE)) return false;
       if (s.t === 0) return x > s.x - pad && x < s.x + s.w + pad && y > s.y - pad && y < s.y + s.h + pad;
@@ -627,6 +658,7 @@ function withBiomeArt(map: GameMap, biome: BiomeStyle): GameMap {
     if (map.reinforce.some((r) => Math.hypot(x - r.x, y - r.y) < 48 + pad)) return true;
     if (map.containers.some((c) => Math.hypot(x - c.x, y - c.y) < 45 + pad)) return true;
     if (map.props.some((p) => Math.hypot(x - p.x, y - p.y) < 72 * p.scale + pad)) return true;
+    if (biome === 'mausoleum' && map.trees.some(t => Math.hypot(x - t.x, y - t.y) < t.r * 1.25 + pad + 12)) return true;
     if (map.water.some((w) => {
       if (w.w && w.h) return Math.abs(x - w.x) < w.w / 2 + pad && Math.abs(y - w.y) < w.h / 2 + pad;
       return Math.hypot(x - w.x, y - w.y) < w.r + pad;
@@ -664,43 +696,118 @@ function withBiomeArt(map: GameMap, biome: BiomeStyle): GameMap {
       ])
     : map.trees;
   const dressed = withAssetCollisions({ ...map, decor: [...map.decor, ...decor], trees });
-  if (biome !== 'hatchery' && biome !== 'mausoleum') return dressed;
+  if (biome === 'harbor' || biome === 'foundry') return dressed;
   const hatchery = biome === 'hatchery';
   const passages = dressed.floors.flatMap((floor) => floor.doors ?? []);
   const featureBoxes = dressed.props.map(propBox);
   const planted: { x: number; y: number; spread: number }[] = [];
   let plantId = dressed.solids.reduce((max, solid) => Math.max(max, solid.id), -1) + 1;
+  type PlantArea = (x: number, y: number, spread: number) => boolean;
+  const existingTrees = [...dressed.trees];
+  const bosses = dressed.enemySpots.filter(spot => ENEMIES[spot.type].boss);
   const placePlants = (count: number, minSize: number, maxSize: number,
-    add: (x: number, y: number, size: number, variant: number) => number) => {
-    for (let placed = 0, attempts = 0; placed < count && attempts < count * 90; attempts++) {
+    add: (x: number, y: number, size: number, variant: number) => number | void, area?: PlantArea) => {
+    const attemptLimit = count * (area ? 380 : 90);
+    for (let placed = 0, attempts = 0; placed < count && attempts < attemptLimit; attempts++) {
       const size = minSize + rnd() * (maxSize - minSize);
       const spread = size * 1.25;
       const margin = spread + 20;
       const x = margin + rnd() * (map.w - 2 * margin);
       const y = margin + rnd() * (map.h - 2 * margin);
       if (map.tracks.some((ty) => Math.abs(y - ty) < spread + 44)) continue;
-      if (blocked(x, y, spread) || overlapsDoor(passages, x, y, spread, spread)) continue;
+      if (area && (!area(x, y, spread) ||
+        bosses.some(b => Math.hypot(x - b.x, y - b.y) < spread + (hatchery ? 165 : 235)) ||
+        existingTrees.some(t => Math.hypot(x - t.x, y - t.y) < spread + t.r * 1.2 + 12))) continue;
+      if (blocked(x, y, spread, !!area) || overlapsDoor(passages, x, y, spread, spread)) continue;
       if (featureBoxes.some((box) => Math.abs(x - box.x) < box.hw + spread &&
         Math.abs(y - box.y) < box.hh + spread)) continue;
       if (planted.some((plant) => Math.hypot(x - plant.x, y - plant.y) < spread + plant.spread + 24)) continue;
       const radius = add(x, y, size, Math.floor(rnd() * 3));
       planted.push({ x, y, spread });
-      dressed.solids.push({ id: plantId++, t: 1, x, y, r: radius, w: 0, h: 0, f: F_MOVE,
+      if (radius !== undefined) dressed.solids.push({ id: plantId++, t: 1, x, y, r: radius, w: 0, h: 0, f: F_MOVE,
         kind: 'asset', v: 0, stamp: 0, dead: false, hp: 0 });
       placed++;
     }
   };
-  placePlants(hatchery ? 38 : 30, 29, 44, (x, y, size, variant) => {
-    dressed.trees.push({ x, y, r: size, v: variant, solid: true });
-    return size * (hatchery ? .24 : .23);
-  });
-  placePlants(hatchery ? 42 : 30, 23, 33, (x, y, size, variant) => {
-    const kind = hatchery
-      ? (variant === 0 ? 'thorn_bush' : 'berry_bush')
-      : (variant === 0 ? 'berry_bush' : 'palace_topiary');
-    dressed.props.push({ x, y, kind, rot: rnd() * TAU_STATIC, scale: size / 26 });
-    return size * .56;
-  });
+  if (hatchery || biome === 'mausoleum') {
+    placePlants(hatchery ? 38 : 30, 29, 44, (x, y, size, variant) => {
+      dressed.trees.push({ x, y, r: size, v: variant, solid: true });
+      return size * (hatchery ? .24 : .23);
+    });
+    placePlants(hatchery ? 42 : 30, 23, 33, (x, y, size, variant) => {
+      const kind = hatchery
+        ? (variant === 0 ? 'thorn_bush' : 'berry_bush')
+        : (variant === 0 ? 'berry_bush' : 'palace_topiary');
+      dressed.props.push({ x, y, kind, rot: rnd() * TAU_STATIC, scale: size / 26 });
+      return size * .56;
+    });
+  }
+  const perimeter: PlantArea = (x, y) => Math.min(x, y, map.w - x, map.h - y) < 220;
+  const addDecorativePlant = (kind: 'mushroom' | 'cedar') => (x: number, y: number, r: number, v: number) => {
+    dressed.trees.push({ x, y, r, v, kind, solid: false });
+  };
+  if (hatchery) {
+    const add = addDecorativePlant('mushroom');
+    const nest = map.pads.find(p => p.type === 'nest_ground');
+    if (nest) placePlants(23, 10, 18, add, (x, y) => {
+      const edge = Math.max(Math.abs(x - (nest.x + nest.w / 2)) / (nest.w / 2),
+        Math.abs(y - (nest.y + nest.h / 2)) / (nest.h / 2));
+      return edge > .82 && edge < 1.53;
+    });
+    placePlants(46, 8, 17, add, perimeter);
+  } else if (biome === 'outpost') {
+    const add = addDecorativePlant('cedar');
+    placePlants(16, 19, 32, add, (x, y) => waterDistance(x, y) < 200);
+    placePlants(23, 23, 38, add, perimeter);
+    // Park the vehicles after the trees so their spacing includes the existing vegetation.
+    const parkTank = (x: number, y: number, size: number, variant: number) => {
+      dressed.props.push({
+        kind: 'outpost_tank', solid: false, x, y, scale: size / 66,
+        rot: [-.25, Math.PI + .21, -.93][variant],
+        paint: ['#8b9d9c', '#a4b1ac', '#63776f'][variant],
+      });
+    };
+    const roadShoulder = (x: number, y: number) => {
+      let distance = Infinity;
+      for (const road of map.roads) for (let i = 0; i + 3 < road.length; i += 2) {
+        distance = Math.min(distance, distToSegment(x, y, road[i], road[i + 1], road[i + 2], road[i + 3]));
+      }
+      return distance < 215;
+    };
+    placePlants(2, 51, 57, parkTank, (x, y) => x < 320 && y > 300 && y < map.h - 260);
+    placePlants(2, 51, 57, parkTank, (x, y) => roadShoulder(x, y) && x < map.w * .51);
+    placePlants(2, 51, 57, parkTank, (x, y) => roadShoulder(x, y) && x >= map.w * .51);
+    const parkAmphibious = (kind: 'outpost_aav' | 'outpost_btr') => {
+      const addVehicle = (x: number, y: number, size: number, variant: number) => {
+        const colors = kind === 'outpost_aav' ? ['#65724d', '#a4aba1', '#546950'] : ['#a39b80', '#5e6e62', '#b2b6aa'];
+        dressed.props.push({
+          kind, x, y, solid: false, scale: size / 58, paint: colors[variant],
+          rot: [Math.PI + .36, -.34, .76][variant] + (kind === 'outpost_btr' ? .31 : 0),
+        });
+      };
+      const remaining = () => 3 - dressed.props.filter(prop => prop.kind === kind).length;
+      // Use dry shoreline first, then road shoulders and the open snow outside the fighting areas.
+      placePlants(2, 37, 44, addVehicle, (x, y) => waterDistance(x, y) < 330);
+      placePlants(remaining(), 43, 49, addVehicle, roadShoulder);
+      placePlants(remaining(), 43, 49, addVehicle, (x, y) => perimeter(x, y, 0) || y > map.h * .68);
+    };
+    parkAmphibious('outpost_aav');
+    parkAmphibious('outpost_btr');
+  } else if (biome === 'airbase') {
+    const add = addDecorativePlant('cedar');
+    const runway = map.pads.find(p => p.type === 'runway');
+    if (runway) for (const side of [-1, 1]) {
+      placePlants(8, 16, 29, add, (x, y) => {
+        const distance = side * (y - (side < 0 ? runway.y : runway.y + runway.h));
+        return distance > 47 && distance < 255 && x > runway.x && x < runway.x + runway.w;
+      });
+    }
+    const snow = map.floors.find(f => f.name === '冰霜雪原');
+    if (snow) placePlants(12, 22, 36, add, (x, y) =>
+      x > snow.x - 55 && x < snow.x + snow.w + 55 && y > snow.y - 100 && y < snow.y + snow.h + 68);
+    placePlants(15, 21, 34, add, (x, y, spread) =>
+      perimeter(x, y, spread) && (x > map.w / 2 || y < map.h * .70));
+  }
   return dressed;
 }
 
@@ -725,7 +832,6 @@ function buildRooms(rooms: RoomDef[]): RoomResult {
   const pads: Pad[] = [];
   const TH = 18; // wall thickness
   // Bosses reach a 70-unit diameter. Leave room for their collider and the 32-unit nav grid.
-  const GAP = 104;
 
   const wallKind = (kind?: string): Cover[0] => {
     if (kind === 'rack' || kind === 'castle_wall') return kind;
@@ -734,9 +840,10 @@ function buildRooms(rooms: RoomDef[]): RoomResult {
 
   for (const room of rooms) {
     const { x, y, w, h } = room;
+    const GAP = room.doorWidth ?? 104;
     const roomCoverStart = cover.length;
     const doors: DoorPassage[] = [];
-    floors.push({ name: room.name, x: x + TH, y: y + TH, w: w - TH * 2, h: h - TH * 2, type: room.floor, roofed: true, doors, wallInset: TH });
+    floors.push({ name: room.name, x: x + TH, y: y + TH, w: w - TH * 2, h: h - TH * 2, type: room.floor, roofed: true, doors, wallInset: TH, theme: room.theme });
     pads.push({ type: 'base', x: x + TH, y: y + TH, w: w - TH * 2, h: h - TH * 2 });
 
     const doorAt = (side: string) => (room.doors ?? []).filter((d) => d[0] === side).map((d) => d[1]);
@@ -1561,160 +1668,198 @@ function buildAirbase(): GameMap {
 
 /** 鸭王陵寝：双宝库提供顶级装备，鸭王在大厅轮换四种招式。 */
 function buildMausoleum(): GameMap {
-  const w = 2800, h = 1800;
-  const water = [
-    { x: 1000, y: 250, r: 0, w: 260, h: 100 },
-    { x: 2050, y: 900, r: 0, w: 200, h: 120 },
-    // One garden river with connected returns. Bridges carve walkable crossings.
-    { x: 1430, y: 482, r: 0, w: 690, h: 56 },
-    { x: 1103, y: 502, r: 0, w: 36, h: 92 },
-    { x: 1757, y: 502, r: 0, w: 36, h: 92 },
+  const w = 3400, h = 3200, center = w / 2;
+  const plaza = { x: 940, y: 1350, w: 1520, h: 1060 };
+  const plazaMidY = plaza.y + plaza.h / 2;
+  // Rounded road caps meet the outer edge of the plaza's border.
+  const plazaRoadOffset = (ROAD_EDGE_WIDTH + ROYAL_PLAZA_BORDER_WIDTH) / 2;
+  const plazaWestApproach = plaza.x - plazaRoadOffset;
+  const plazaEastApproach = plaza.x + plaza.w + plazaRoadOffset;
+  const sideDoorWidth = 152;
+  const names = ['寒晶议事厅', '铁壁军械厅', '烈焰机库', '雷达指挥厅', '王座大厅'];
+  const halls: RoomDef[] = [
+    { name: names[0], x: 200, y: 2125, w: 680, h: 530, floor: 'tile', theme: 'frost', doorWidth: sideDoorWidth, doors: [['s', .5]] },
+    { name: names[1], x: 2520, y: 2100, w: 680, h: 540, floor: 'concrete', theme: 'guard', doorWidth: sideDoorWidth, doors: [['s', .5]] },
+    { name: names[2], x: 2550, y: 1320, w: 650, h: 550, floor: 'concrete', theme: 'air', doorWidth: sideDoorWidth, doors: [['s', .5]] },
+    { name: names[3], x: 200, y: 1100, w: 650, h: 520, floor: 'tile', theme: 'radar', doorWidth: sideDoorWidth, doors: [['s', .5]] },
+    { name: names[4], x: 975, y: 560, w: 1450, h: 595, floor: 'tile', theme: 'royal',
+      kind: 'castle_wall', doorWidth: 216, doors: [['s', .5], ['n', .5]] },
+    { name: '王家西宝库', x: 225, y: 166, w: 650, h: 304, floor: 'tile', theme: 'royal',
+      doors: [['e', .55]], loot: [['safe', .18, .2], ['treasure_chest', .4, .72], ['coin_pile', .68, .23]] },
+    { name: '王家东宝库', x: 2525, y: 166, w: 650, h: 304, floor: 'tile', theme: 'royal',
+      doors: [['w', .55]], loot: [['safe', .8, .2], ['treasure_chest', .58, .73], ['coin_pile', .35, .23]] },
   ];
-  const rooms = buildRooms([
-    { name: '王座大厅', x: 1050, y: 650, w: 760, h: 560, floor: 'concrete', kind: 'castle_wall',
-      doors: [['n', 0.5], ['s', 0.5], ['w', 0.5], ['e', 0.5]],
-      loot: [['safe', 0.15, 0.2], ['weaponcase', 0.85, 0.2], ['medbox', 0.5, 0.85]] },
-    { name: '西宝库', x: 350, y: 350, w: 420, h: 340, floor: 'tile', doors: [['s', 0.5], ['e', 0.6]],
-      loot: [['safe', 0.2, 0.2], ['pc', 0.8, 0.25], ['crate', 0.5, 0.85]] },
-    { name: '东宝库', x: 2050, y: 350, w: 420, h: 340, floor: 'tile', doors: [['s', 0.5], ['w', 0.6]],
-      loot: [['safe', 0.2, 0.2], ['pc', 0.8, 0.25], ['crate', 0.5, 0.85]] },
-    { name: '禁卫营', x: 450, y: 1250, w: 500, h: 340, floor: 'concrete', doors: [['n', 0.5], ['e', 0.5]],
-      racks: [[520, 1320, 200, 24], [520, 1400, 200, 24]], loot: [['weaponcase', 0.2, 0.2], ['crate', 0.8, 0.3], ['medbox', 0.5, 0.85]] },
-    { name: '鸭王私人宝库', x: 1900, y: 1300, w: 560, h: 400, floor: 'tile', doors: [['n', 0.5], ['w', 0.5]],
-      loot: [['safe', 0.17, 0.18], ['weaponcase', 0.83, 0.18], ['treasure_chest', 0.5, 0.5], ['safe', 0.18, 0.82], ['duffel', 0.82, 0.82]] },
-    { name: '回廊哨', x: 1150, y: 140, w: 360, h: 280, floor: 'wood', doors: [['s', 0.5], ['e', 0.5]],
-      loot: [['crate', 0.2, 0.2], ['toolbox', 0.8, 0.3]] },
-    { name: '南库', x: 1000, y: 1680, w: 380, h: 260, floor: 'concrete', doors: [['n', 0.5], ['w', 0.5]],
-      loot: [['weaponcase', 0.2, 0.2], ['duffel', 0.8, 0.3]] },
-    { name: '西侧碑亭', x: 120, y: 150, w: 220, h: 220, floor: 'tile', doors: [['s', 0.5], ['e', 0.5]],
-      loot: [['crate', 0.2, 0.2], ['treasure_chest', 0.7, 0.75]] },
-    { name: '东侧祭殿', x: 2520, y: 180, w: 250, h: 300, floor: 'tile', doors: [['s', 0.5], ['w', 0.5]],
-      loot: [['safe', 0.2, 0.2], ['medbox', 0.75, 0.3], ['weaponcase', 0.5, 0.8]] },
-    { name: '碑林回廊', x: 100, y: 820, w: 220, h: 300, floor: 'concrete', doors: [['n', 0.5], ['e', 0.5]],
-      loot: [['crate', 0.2, 0.25], ['duffel', 0.8, 0.3], ['medbox', 0.5, 0.85]] },
-  ]);
-  const extraCover: Cover[] = [
-    ['wall', 1020, 600, 20, 180], ['wall', 1800, 600, 20, 180],
-    ['wall', 1020, 1100, 20, 180], ['wall', 1800, 1100, 20, 180],
-    ['wall', 900, 1400, 18, 180], ['wall', 2500, 800, 18, 200],
-    ['cargo', 600, 800, 200, 60], ['cargo', 2290, 850, 170, 56], ['cargo', 1750, 1500, 190, 58],
-    ['cargo', 650, 1600, 190, 58], ['cargo', 2300, 650, 170, 56],
-    ['fence', 440, 850, 16, 240], ['fence', 2540, 1250, 16, 220],
-    ['wall', 980, 500, 18, 160], ['wall', 1820, 500, 18, 160],
-    ['cargo', 760, 1050, 180, 56], ['cargo', 2550, 1080, 160, 56],
-    ['fence', 1000, 1500, 16, 160], ['fence', 2650, 700, 16, 160],
+  const rooms = buildRooms(halls);
+  const unit = (type: EnemyType, x: number, y: number): GauntletUnit => ({ type, x, y });
+  const encounters: Omit<GauntletStage, 'name' | 'entrance'>[] = [
+    { bosses: ['frostMarshal'], direction: '旗庭西南 · 从南门进入',
+      guards: [unit('armored', 424, 2316), unit('shield', 630, 2394), unit('bandit', 744, 2340)],
+      reinforcements: { frostMarshal: [unit('bandit', 425, 2177), unit('bandit', 634, 2177)] } },
+    { bosses: ['ironGuard'], direction: '旗庭东南 · 从南门进入',
+      guards: [unit('armored', 2720, 2392), unit('shield', 2830, 2492), unit('bandit', 3032, 2344)],
+      reinforcements: { ironGuard: [unit('bandit', 2632, 2168), unit('bandit', 2976, 2200)] } },
+    { bosses: ['flameAce'], direction: '沿旗庭东侧向北 · 从南门进入',
+      guards: [unit('armored', 2724, 1632), unit('shield', 2800, 1760), unit('bandit', 3050, 1582)],
+      reinforcements: { flameAce: [unit('bandit', 2829, 1410), unit('hen', 3090, 1785)] } },
+    { bosses: ['radarWarden'], direction: '旗庭西北 · 从南门进入',
+      guards: [unit('armored', 423, 1420), unit('shield', 529, 1490), unit('bandit', 691, 1345)],
+      reinforcements: { radarWarden: [unit('bandit', 446, 1172), unit('bandit', 628, 1216)] } },
+    { bosses: ['broodQueen', 'duckKing'], direction: '旗庭正北 · 登宫殿金阶',
+      guards: [
+        unit('shield', 1565, 1038), unit('shield', 1835, 1038), unit('shield', 1700, 856),
+        unit('armored', 1355, 962), unit('armored', 2045, 962), unit('armored', 1580, 810), unit('armored', 1820, 810),
+        unit('bandit', 1136, 976), unit('bandit', 2264, 976), unit('bandit', 1136, 731), unit('bandit', 2264, 731),
+        unit('hen', 1700, 682),
+      ],
+      reinforcements: {
+        broodQueen: [unit('bandit', 1160, 638), unit('hen', 1400, 752), unit('bandit', 1510, 926)],
+        duckKing: [unit('bandit', 2240, 638), unit('bandit', 2000, 752), unit('bandit', 1890, 926)],
+      } },
   ];
-  const props: SceneryProp[] = [
-    { kind: 'container_truck', x: 2500, y: 1600, rot: 0, scale: 1.0 },
-    { kind: 'dump_truck', x: 300, y: 1050, rot: Math.PI / 2, scale: 1.05 },
-    { kind: 'flatbed', x: 1600, y: 1650, rot: Math.PI / 2, scale: 1.0 },
-    { kind: 'barrels', x: 900, y: 700, scale: 1.0, rot: 0 },
-    { kind: 'crane', x: 2450, y: 250, scale: 1.1, rot: 0 },
-    // The stone uprights sit on the two existing north wall segments.
-    { kind: 'king_vault_gate', x: 2180, y: 1309, rot: 0, scale: 1.25 },
-    { kind: 'table_map_cup', x: 1320, y: 320, rot: 0, scale: 0.9 },
-    { kind: 'wood_chair', x: 1320, y: 386, rot: 0, scale: 0.78 },
-    { kind: 'vending_machine', x: 2600, y: 1080, rot: 0, scale: 0.8 },
-    // 王座大厅：鸭王宝座、神道石阶与侧厅陈设
-    { kind: 'duck_throne', x: 1450, y: 758, rot: 0, scale: 1.18 },
-    { kind: 'wood_table', x: 1156, y: 826, rot: 0, scale: 0.9 },
-    { kind: 'crate_stack', x: 2058, y: 1602, rot: 0, scale: 0.95 },
-    { kind: 'wood_table', x: 210, y: 980, rot: 0, scale: 0.85 },
-    { kind: 'stone_steps', x: 1100, y: 1400, rot: 0, scale: 0.85 },
-    // Quick landmarks in local map coordinates.
-    { kind: 'duck_king_statue', x: 1560, y: 365, rot: 0, scale: 1 },
-    { kind: 'duck_king_statue', x: 2690, y: 400, rot: 0, scale: 0.9 },
-    { kind: 'fountain', x: 1800, y: 1440, rot: 0, scale: 0.9 },
-    { kind: 'royal_lantern', x: 1340, y: 560, rot: 0, scale: 1 },
-    { kind: 'royal_lantern', x: 1520, y: 560, rot: 0, scale: 1 },
-    { kind: 'rune_pillar', x: 1270, y: 500, rot: 0, scale: 1 },
-    { kind: 'rune_pillar', x: 1590, y: 500, rot: 0, scale: 1 },
-    { kind: 'rune_pillar', x: 940, y: 600, rot: 0, scale: 0.9 },
-    { kind: 'rune_pillar', x: 1900, y: 600, rot: 0, scale: 0.9 },
-    { kind: 'stone_lion', x: 1180, y: 600, rot: 0, scale: 1 },
-    { kind: 'stone_lion', x: 1680, y: 600, rot: 0, scale: 1 },
-    { kind: 'castle_steps', x: 1430, y: 1278, rot: Math.PI / 2, scale: 1, len: 136, width: 112 },
-    { kind: 'castle_steps', x: 1430, y: 620, rot: -Math.PI / 2, scale: 1, len: 60, width: 100 },
-    { kind: 'castle_steps', x: 1020, y: 930, rot: Math.PI, scale: 1, len: 60, width: 100 },
-    { kind: 'castle_steps', x: 1840, y: 930, rot: 0, scale: 1, len: 60, width: 100 },
-    { kind: 'royal_flagpole', x: 1359, y: 1247, rot: .12, scale: 1.1 },
-    { kind: 'royal_flagpole', x: 1501, y: 1247, rot: .12, scale: 1.1 },
-    { kind: 'royal_flagpole', x: 1359, y: 1320, rot: .12, scale: 1 },
-    { kind: 'royal_flagpole', x: 1501, y: 1320, rot: .12, scale: 1 },
-    ...[1175, 1430, 1685].map((x): SceneryProp =>
-      ({ kind: 'stone_bridge', x, y: 482, rot: Math.PI / 2, scale: 1, len: 92, width: 96 })),
-    { kind: 'rowboat', x: 1255, y: 481, rot: Math.PI / 2, scale: .72 },
-    { kind: 'rowboat', x: 1588, y: 481, rot: -Math.PI / 2, scale: .72 },
-    { kind: 'fountain', x: 1265, y: 555, rot: 0, scale: .82 },
-    { kind: 'fountain', x: 1595, y: 555, rot: 0, scale: .82 },
-    ...[1122, 1285, 1575, 1738].map((x): SceneryProp =>
-      ({ kind: 'palace_topiary', x, y: 601, rot: 0, scale: 1.2 })),
+  const southDoors = rooms.floors.slice(0, encounters.length)
+    .map(floor => floor.doors!.find(door => door.y > floor.y + floor.h / 2)!);
+  const gauntlet: GauntletStage[] = encounters.map((encounter, i) => {
+    const door = southDoors[i];
+    return { ...encounter, name: names[i], entrance: { x: door.x, y: door.y + (i === 4 ? 125 : 70) } };
+  });
+  const perimeterLeft = 90, perimeterRight = 3286;
+  const breachTop = 1890, breachBottom = 2068;
+  const cover: Cover[] = [
+    ['wall', perimeterLeft, 92, 3220, 26], ['wall', perimeterLeft, 3080, 3220, 26],
+    ...[perimeterLeft, perimeterRight].flatMap((x): Cover[] => [
+      ['wall', x, 118, 24, breachTop - 118], ['wall', x, breachBottom, 24, 3080 - breachBottom],
+    ]),
+    // Extend the castle's north wall to both map edges. The north gate is the only way to the rewards.
+    ['castle_wall', -4, 560, 979, 18], ['castle_wall', 2425, 560, w - 2421, 18],
+    ['wall', 340, 2250, 30, 107], ['wall', 524, 2480, 114, 27],
+    ['cargo', 2720, 2230, 96, 45], ['cargo', 2900, 2470, 130, 47],
+    ['cargo', 2710, 1440, 105, 44], ['rack', 2915, 1715, 99, 36],
+    ['wall', 364, 1250, 30, 110], ['rack', 592, 1440, 94, 30],
+    ['castle_wall', 1225, 808, 24, 113], ['castle_wall', 2151, 808, 24, 113],
   ];
-  return withBiomeArt(reframeMap({
-    w, h, water, props,
-    solids: raidSolids(w, h, [...rooms.cover, ...extraCover], water, [[1150, 580], [1780, 1180], [820, 1080], [2300, 1000]]),
-    floors: [
-      ...rooms.floors,
-      { name: '王陵广场', type: 'concrete', x: 900, y: 650, w: 1000, h: 650, roofed: false },
-      { name: '王家秘库前厅', type: 'tile', x: 1850, y: 1280, w: 610, h: 430, roofed: false },
-      { name: '神道', type: 'tile', x: 1300, y: 80, w: 220, h: 350, roofed: false },
-    ],
-    decor: [...rooms.decor, ...scatterDecor(w, h, 100, 13, water)], trees: [], tracks: [],
+  const water = [{ x: center, y: 280, r: 0, w: 440, h: 120 }];
+  const solids = raidSolids(w, h, [...rooms.cover, ...cover], water, []);
+  const gate = (stage: number, x: number, y: number, width: number, height: number) => {
+    solids.push({ id: solids.length, kind: 'raid_gate', t: 0, x, y, w: width, h: height,
+      r: 0, f: F_MOVE | F_BULLET | F_SIGHT, v: stage, stamp: 0, dead: false, hp: 0 });
+  };
+  // Each defeated general opens the next side hall. After the fourth, the castle opens.
+  for (let i = 1; i < gauntlet.length; i++) {
+    const door = southDoors[i];
+    const width = halls[i].doorWidth!;
+    const wallDepth = rooms.floors[i].wallInset!;
+    gate(i - 1, door.x - width / 2, door.y - wallDepth / 2, width, wallDepth);
+  }
+  gate(4, center - 108, 560, 216, 18);
+
+  const props: SceneryProp[] = [];
+  const scenic = (kind: SceneryProp['kind'], x: number, y: number, scale = 1, rot = 0) => {
+    props.push({ kind, x, y, scale, rot, solid: false });
+  };
+  scenic('frost_pylon', 320, 2200, 1.25);
+  scenic('ice_crystal', 692, 2220, 1.1);
+  scenic('ice_block', 712, 2480, 1.15);
+  scenic('ice_beacon', 305, 2510, 1.15);
+  scenic('outpost_tank', 3060, 2260, .88, -.20);
+  scenic('outpost_btr', 2670, 2520, .86, Math.PI);
+  scenic('metal_workbench', 3085, 2560, 1.12);
+  scenic('sandbag_wall', 2880, 2155, 1.1);
+  scenic('fighter_jet_parked', 3065, 1475, 1.05, .42);
+  scenic('furnace_vent', 2635, 1785, 1.08);
+  scenic('fuel_tank', 3095, 1690, 1.07, Math.PI / 2);
+  scenic('street_lamp', 2597, 1405, .86);
+  scenic('radar_station', 296, 1175, 1.1);
+  scenic('ice_beacon', 735, 1213, 1.15);
+  scenic('antenna_mast', 715, 1510, .92);
+  scenic('missile_rack', 303, 1490, .96);
+
+  // Island-style canopies flank the halls without closing their south approaches.
+  const hallTrees: Tree[] = [
+    [325, 2056, 30], [719, 2055, 31], [328, 2746, 41],
+    [2710, 2049, 26], [3062, 2049, 26], [3080, 2731, 41],
+    [2670, 1223, 39], [3076, 1207, 44], [2415, 1277, 38],
+    [298, 996, 38], [613, 979, 44], [934, 1240, 40],
+  ].map(([x, y, r], i) => ({ x, y, r, v: i % 3, kind: 'broadleaf', solid: false }));
+
+  for (const side of [-1, 1]) {
+    const wallX = side < 0 ? perimeterLeft + 12 : perimeterRight + 12;
+    scenic('wall_rubble', wallX, breachTop + 21, .96, Math.PI / 2);
+    scenic('wall_rubble', wallX, breachBottom - 21, 1.14, -Math.PI / 2);
+    scenic('street_lamp', wallX - side * 65, 1980, .92);
+    scenic('stone_lion', center + side * 143, 1190, 1.15);
+    scenic('duck_king_statue', center + side * 266, 1210, 1.62);
+    scenic('royal_lantern', center + side * 350, 1250, 1.1);
+    scenic('royal_lantern', center + side * 526, 650, 1.1);
+    scenic('fountain', center + side * 374, 316, 1.17);
+    scenic('duck_king_statue', center + side * 322, 150, 1.16);
+    scenic('palace_topiary', center + side * 329, 431, 1.1);
+    scenic('palace_topiary', center + side * 655, 1820, .95);
+    scenic('bench_park', center + side * 565, 1960, 1.0);
+    scenic('royal_flagpole', center + side * 59, plazaMidY, 1.17);
+    scenic('palace_fountain', center + side * 350, plazaMidY + 18, 1.42);
+    scenic('greek_column', center + side * 215, plazaMidY - 147, 1.15);
+    scenic('royal_flowerbed', center + side * 350, plazaMidY - 140, 1.15);
+    scenic('royal_flowerbed', center + side * 350, plazaMidY + 176, 1.18);
+    scenic('royal_flagpole', center + side * 147, 2860, .96);
+  }
+  scenic('royal_flagpole', center, plazaMidY - 35, 1.32);
+  scenic('triumphal_arch', center, plaza.y + plaza.h + 100);
+  scenic('duck_throne', 1970, 677, 1.4);
+  scenic('egg_nest', 1440, 690, 1.4);
+  scenic('nest_cluster', 1300, 697, 1.05);
+  scenic('nest_cluster', 1550, 687, 1.05);
+  props.push({ kind: 'castle_steps', x: center, y: 1202, rot: Math.PI / 2, scale: 1, len: 96, width: 174, paint: '#d4a143', solid: false },
+    { kind: 'stone_bridge', x: center, y: 280, rot: Math.PI / 2, scale: 1, len: 163, width: 125 });
+  return withBiomeArt({
+    w, h, solids, props, floors: rooms.floors, water, tracks: [], gauntlet, raidTime: 780,
+    trees: hallTrees, decor: rooms.decor,
     roads: [
-      [50, 120, 50, 750, 380, 750, 380, 1640, 1850, 1640],
-      [380, 1000, 980, 1000],
-      [1850, 1230, 2500, 1230, 2500, 1745, 2800, 1745],
-      [1850, 1640, 1850, 1000, 2820, 1000, 2820, 120],
-      [1260, 100, 1560, 100, 1560, 445],
-      [1430, 1380, 1430, 1640],
+      [730, 2890, 1110, 2890, 1440, 2655, center, 2615, center, plaza.y + plaza.h + plazaRoadOffset],
+      [2670, 2890, 2290, 2890, 1960, 2655, center, 2615],
+      [540, 2691, 540, 2755, 958, 2755, 1110, 2890],
+      [2860, 2676, 2860, 2760, 2445, 2760, 2290, 2890],
+      [2875, 1906, 2875, 1979], [525, 1656, 525, 1979],
+      [center, 1285, center, plaza.y - plazaRoadOffset],
+      [110, 1979, 780, 1979, plazaWestApproach, plazaMidY],
+      [3298, 1979, 2555, 1979, plazaEastApproach, 1938, plazaEastApproach, plazaMidY],
+      [931, 333, 1080, 333, 1150, 400], [2469, 333, 2320, 333, 2250, 400],
     ],
-    pads: [...rooms.pads, { type: 'platform', x: 2450, y: 1550, w: 250, h: 140 },
-      { type: 'base', x: 1000, y: 650, w: 800, h: 600 },
-      { type: 'royal_garden', x: 1060, y: 430, w: 740, h: 220 }],
+    pads: [...rooms.pads,
+      { type: 'royal_plaza', ...plaza },
+      { type: 'royal_garden', x: 1025, y: 125, w: 1350, h: 393 },
+      { type: 'platform', x: 640, y: 2860, w: 182, h: 140 },
+      { type: 'platform', x: 2578, y: 2860, w: 182, h: 140 },
+    ],
     containers: [
       ...rooms.containers,
-      { type: 'medbox', x: 880, y: 1180 }, { type: 'crate', x: 2100, y: 1080 },
-      { type: 'weaponcase', x: 500, y: 450, fixedItem: 'rpg' },
-      { type: 'safe', x: 2250, y: 500, fixedItem: 'awmlegend' },
-      { type: 'weaponcase', x: 2100, y: 1400, fixedItem: 'm4legend' },
-      { type: 'crate', x: 1550, y: 250, fixedItem: 'minigun' },
-      { type: 'safe', x: 1150, y: 1770, fixedItem: 'frostmp9' },
-      { type: 'vending', x: 2600, y: 1080 }, { type: 'treasure_chest', x: 800, y: 520 }, { type: 'coin_pile', x: 1960, y: 520 },
-      { type: 'treasure_chest', x: 2000, y: 1540 }, { type: 'coin_pile', x: 2340, y: 1540 },
-      { type: 'weaponcase', x: 260, y: 280, fixedItem: 'rpg' }, { type: 'treasure_chest', x: 200, y: 1000 },
-      { type: 'medbox', x: 2600, y: 400 }, { type: 'safe', x: 2600, y: 1150 },
+      { type: 'weaponcase', x: 674, y: 2943, fixedItem: 'rifle' },
+      { type: 'weaponcase', x: 2726, y: 2943, fixedItem: 'rifle' },
+      { type: 'medbox', x: 780, y: 2940 }, { type: 'medbox', x: 2620, y: 2940 },
+      { type: 'medbox', x: 1190, y: 2205 }, { type: 'medbox', x: 2210, y: 2205 },
+      { type: 'medbox', x: 1170, y: 1600 }, { type: 'medbox', x: 2220, y: 1540 },
+      { type: 'weaponcase', x: 1700, y: 1560, fixedItem: 'lmg' },
+      { type: 'safe', x: 450, y: 285, fixedItem: 'awmlegend' },
+      { type: 'weaponcase', x: 2946, y: 293, fixedItem: 'm4legend' },
     ],
-    spawns: [
-      { x: 110, y: 600, chick: [620, 800] }, { x: 1350, y: 100, chick: [1400, 520] },
-      { x: 2680, y: 600, chick: [2350, 800] }, { x: 200, y: 1700, chick: [700, 1500] },
-    ],
-    extractions: [{ id: 'A', name: '西门神道', x: 130, y: 200, r: 78 }, { id: 'B', name: '东陵货运口', x: 2650, y: 1650, r: 78 }],
+    spawns: [{ x: 730, y: 2928, chick: [780, 3005] }, { x: 2670, y: 2928, chick: [2620, 3005] }],
+    extractions: [{ id: 'A', name: '西侧塌墙', x: 102, y: 1979, r: 67 },
+      { id: 'B', name: '东侧塌墙', x: 3298, y: 1979, r: 67 }],
     enemySpots: [
-      { type: 'duckKing', x: 1450, y: 930, n: 1 },
-      { type: 'elite', x: 1180, y: 860, n: 1 }, { type: 'elite', x: 1900, y: 700, n: 1 },
-      { type: 'elite', x: 620, y: 700, n: 1 }, { type: 'elite', x: 2350, y: 1250, n: 1 },
-      { type: 'shield', x: 1120, y: 1120, n: 1 }, { type: 'shield', x: 1850, y: 1150, n: 1 },
-      { type: 'shield', x: 2300, y: 900, n: 1 }, { type: 'armored', x: 850, y: 620, n: 1 },
-      { type: 'armored', x: 2050, y: 1120, n: 1 }, { type: 'armored', x: 700, y: 1480, n: 1 },
-      { type: 'hen', x: 1300, y: 1250, n: 1 }, { type: 'hen', x: 2200, y: 600, n: 1 },
-      { type: 'hen', x: 600, y: 1000, n: 1 }, { type: 'lookout', x: 1300, y: 400, n: 1 },
-      { type: 'lookout', x: 2500, y: 1450, n: 1 }, { type: 'bandit', x: 500, y: 1000, n: 1 },
-      { type: 'bandit', x: 2000, y: 1050, n: 1 }, { type: 'chicken', x: 900, y: 1550, n: 4 },
-      { type: 'elite', x: 260, y: 300, n: 1 }, { type: 'shield', x: 200, y: 960, n: 1 },
-      { type: 'armored', x: 2600, y: 350, n: 1 }, { type: 'shield', x: 2600, y: 1150, n: 1 },
+      { type: 'frostMarshal', x: 523, y: 2353, n: 1 },
+      { type: 'ironGuard', x: 2890, y: 2352, n: 1 },
+      { type: 'flameAce', x: 2880, y: 1582, n: 1 },
+      { type: 'radarWarden', x: 500, y: 1366, n: 1 },
+      { type: 'broodQueen', x: 1451, y: 838, n: 1 },
+      { type: 'duckKing', x: 1950, y: 838, n: 1 },
     ],
-    reinforce: [{ x: 150, y: 1050 }, { x: 1150, y: 120 }, { x: 2150, y: 180 }, { x: 2650, y: 900 }, { x: 2650, y: 1400 }, { x: 750, y: 1720 }, { x: 1800, y: 1720 }, { x: 250, y: 300 }, { x: 2600, y: 350 }, { x: 200, y: 1000 }],
+    reinforce: [],
     zones: [
-      { name: '北侧神道与殿廊', x: -300, y: -250, w: 3400, h: 700 },
-      { name: '西侧禁卫与西宝库', x: -300, y: 450, w: 1200, h: 1000 },
-      { name: '御花园', x: 1060, y: 430, w: 740, h: 220 },
-      { name: '鸭王城堡', x: 900, y: 650, w: 900, h: 800 },
-      { name: '东侧王家秘库', x: 1800, y: 450, w: 1300, h: 1000 },
-      { name: '南侧外陵与运输道', x: -300, y: 1450, w: 3400, h: 550 },
-      { name: '西侧碑亭与碑林', x: -200, y: 100, w: 600, h: 1250 },
-      { name: '东侧祭殿', x: 2400, y: 100, w: 600, h: 700 },
+      ...halls.map(hall => ({ name: hall.name, x: hall.x, y: hall.y, w: hall.w, h: hall.h })),
+      { name: '御花园', x: 1025, y: 125, w: 1350, h: 393 },
+      { name: '中央旗庭', ...plaza },
+      { name: '南侧集结营地', x: 0, y: 2810, w, h: 390 },
     ],
-  }, 300, 250, 3400, 2300), 'mausoleum');
+  }, 'mausoleum');
 }
 
 export function buildMap(): GameMap {

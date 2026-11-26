@@ -34,10 +34,10 @@ export default function LevelPicker({ selected, extracts, debugMode, onPick, onC
                 <span className="block min-w-0 space-y-1.5">
                   <span className="block font-black text-[#fff2c5]">{level.name}</span>
                   <span className="block text-xs leading-snug text-white/65">{level.theme}</span>
-                  <span className="flex items-center gap-2">
-                    {(level.bosses ?? [level.boss]).map((id) => <Portrait key={id} id={id} className="size-10" />)}
+                  <span className="flex flex-wrap items-center gap-2">
+                    {(level.bosses ?? [level.boss]).map((id) => <Portrait key={id} id={id} className={level.id === 'mausoleum' ? 'size-6' : 'size-10'} />)}
                     <span className="text-xs leading-tight text-white/85">
-                      {(level.bosses ?? [level.boss]).map((id) => ENEMIES[id].name).join(' + ')}
+                      {level.id === 'mausoleum' ? '四将军 → 孵巢鸭后与鸭王' : (level.bosses ?? [level.boss]).map((id) => ENEMIES[id].name).join(' + ')}
                     </span>
                   </span>
                   <span className="block text-[11px] text-[#ff9b77]">{level.difficulty}</span>

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
-import type { FireZone, Game } from './game';
-import { FEATHER_COLORS, P_DUST, P_FIRE, P_MUZZLE, P_RING, P_SMOKE, P_SPARK } from './game';
+import type { BossBurst, FireZone, Game } from './game';
+import { FEATHER_COLORS, P_DUST, P_FIRE, P_MUZZLE, P_RING, P_SMOKE, P_SPARK, TAU } from './game';
 import type { Floor, RaidMapId, SceneryProp, Solid } from './map';
 import type { Enemy } from './game';
 import { createTerrain } from './terrain3d';
@@ -148,12 +148,112 @@ function groundPatchGeometry() {
   return mesh;
 }
 
+function mushroomCap(profile: [number, number][]) {
+  return new THREE.LatheGeometry(profile.map(([radius, height]) => new THREE.Vector2(radius, height)), 10);
+}
+
+function tankArmorGeometry() {
+  const mesh = new THREE.BoxGeometry(1, 1, 1);
+  const vertices = mesh.getAttribute('position');
+  for (let i = 0; i < vertices.count; i++) {
+    if (vertices.getY(i) < 0) continue;
+    vertices.setX(i, vertices.getX(i) * .74 + .085);
+    vertices.setZ(i, vertices.getZ(i) * .76);
+  }
+  mesh.computeVertexNormals();
+  return mesh;
+}
+
+function tankTrackGeometry() {
+  const section = new THREE.Shape();
+  section.moveTo(-.5, -.13);
+  section.lineTo(-.40, -.5);
+  section.lineTo(.41, -.5);
+  section.lineTo(.5, -.16);
+  section.lineTo(.5, .24);
+  section.lineTo(.40, .5);
+  section.lineTo(-.38, .5);
+  section.lineTo(-.5, .22);
+  section.closePath();
+  return new THREE.ExtrudeGeometry(section, { depth: 1, bevelEnabled: false }).translate(0, 0, -.5);
+}
+
+function amphibiousHullGeometry(bowWidth: number, bowSlope: number) {
+  const mesh = new THREE.BoxGeometry(1, 1, 1);
+  const vertices = mesh.getAttribute('position');
+  for (let i = 0; i < vertices.count; i++) {
+    const bow = vertices.getX(i) < 0, top = vertices.getY(i) > 0;
+    vertices.setX(i, bow ? (top ? -.5 : -.5 + bowSlope) : (top ? .5 : .43));
+    vertices.setZ(i, vertices.getZ(i) * (bow ? bowWidth : 1) * (top ? 1 : .78));
+  }
+  mesh.computeVertexNormals();
+  return mesh;
+}
+
+const ARCH_STONES = 11;
+function archStoneGeometry() {
+  const halfAngle = Math.PI / ARCH_STONES / 2 - .007;
+  const section = new THREE.Shape();
+  section.moveTo(-Math.sin(halfAngle), Math.cos(halfAngle));
+  section.lineTo(0, 1);
+  section.lineTo(Math.sin(halfAngle), Math.cos(halfAngle));
+  const inner = .72;
+  section.lineTo(inner * Math.sin(halfAngle), inner * Math.cos(halfAngle));
+  section.lineTo(0, inner);
+  section.lineTo(-inner * Math.sin(halfAngle), inner * Math.cos(halfAngle));
+  section.closePath();
+  return new THREE.ExtrudeGeometry(section, { depth: 1, bevelEnabled: false }).translate(0, 0, -.5);
+}
+
+function archSpandrelGeometry() {
+  const sides = [-1, 1].map(side => {
+    const section = new THREE.Shape();
+    section.moveTo(side * 1.34, 0);
+    for (let i = 0; i <= ARCH_STONES; i++) {
+      const angle = i * Math.PI / (2 * ARCH_STONES);
+      section.lineTo(side * .97 * Math.cos(angle), .97 * Math.sin(angle));
+    }
+    section.lineTo(0, 1.01);
+    section.lineTo(side * 1.34, 1.01);
+    section.closePath();
+    return section;
+  });
+  return new THREE.ExtrudeGeometry(sides, { depth: 1, bevelEnabled: false }).translate(0, 0, -.5);
+}
+
+function flutedColumnGeometry() {
+  const column = new THREE.LatheGeometry([new THREE.Vector2(.50, -.5), new THREE.Vector2(.41, .5)], 48);
+  const vertices = column.getAttribute('position');
+  for (let i = 0; i < vertices.count; i++) {
+    const x = vertices.getX(i), z = vertices.getZ(i);
+    const flute = .96 + Math.cos(Math.atan2(z, x) * 12) * .04;
+    vertices.setXYZ(i, x * flute, vertices.getY(i), z * flute);
+  }
+  column.computeVertexNormals();
+  return column;
+}
+
 const geometry = () => ({
   block: new THREE.BoxGeometry(1,1,1),
   round: new THREE.SphereGeometry(.5,12,8),
   drum: new THREE.CylinderGeometry(.5,.5,1,12),
   crown: new THREE.IcosahedronGeometry(.5,0),
   pine: new THREE.ConeGeometry(.5, 1, 7),
+  archStone: archStoneGeometry(),
+  archSpandrel: archSpandrelGeometry(),
+  flutedColumn: flutedColumnGeometry(),
+  fountainBowl: new THREE.LatheGeometry([[0, -.5], [.23, -.5], [.33, -.34], [.46, .02], [.5, .32],
+    [.50, .5], [.45, .5], [.445, .32], [.40, .10], [.18, -.24], [0, -.24]]
+    .map(([r,y]) => new THREE.Vector2(r,y)), 24),
+  mushroomDome: mushroomCap([[0, -.5], [.39, -.5], [.5, -.28], [.43, .12], [.27, .41], [0, .5]]),
+  mushroomBell: mushroomCap([[0, -.5], [.5, -.5], [.43, -.33], [.31, .19], [.17, .43], [0, .5]]),
+  mushroomShelf: mushroomCap([[0, -.48], [.38, -.47], [.5, -.23], [.47, .08], [.32, .22], [.16, .5], [0, .39]]),
+  tankArmor: tankArmorGeometry(),
+  tankTrack: tankTrackGeometry(),
+  tankWheel: new THREE.CylinderGeometry(.5, .5, 1, 10).rotateX(Math.PI / 2),
+  tankBarrel: new THREE.CylinderGeometry(.5, .5, 1, 8).rotateZ(Math.PI / 2),
+  aavHull: amphibiousHullGeometry(.93, .15),
+  btrHull: amphibiousHullGeometry(.64, .23),
   ring: new THREE.TorusGeometry(.5,.012,5,56).rotateX(-Math.PI/2),
   projectile: new THREE.IcosahedronGeometry(.5,1),
   flame: flameGeometry(),
@@ -179,6 +279,13 @@ const geometry = () => ({
 });
 type Shape = keyof ReturnType<typeof geometry>;
 type Batch = { mesh: THREE.InstancedMesh; used: number };
+
+const MUSHROOM_VARIANTS = [
+  ['mushroomDome', '#ce6249', '#e5b594', .63],
+  ['mushroomBell', '#bf8946', '#edcb86', .86],
+  ['mushroomShelf', '#9370a6', '#cea5ca', .43],
+] as const;
+const CEDAR_COLORS = ['#31554f', '#3d655d', '#527b71', '#689083'] as const;
 
 const SCENE_BG: Record<string,string> = {
   island: '#4d604b', harbor: '#46565c', foundry: '#4a443c',
@@ -347,6 +454,29 @@ export class WorldRenderer3D {
     if (s.dead || ['bound','water','tree','container','asset'].includes(s.kind)) return;
     const art = BUILDING_ART[g.mapId];
     const x=s.x+(s.t===0?s.w/2:0),y=s.y+(s.t===0?s.h/2:0);
+    if (s.kind === 'raid_gate') {
+      const alpha = this.behindPlayer(g, x, y, s.w, s.h, 80) ? .25 : 1;
+      const metal = s.v === 4 ? '#504054' : '#42484b';
+      const vertical = s.h > s.w, span = Math.max(s.w, s.h), depth = Math.min(s.w, s.h);
+      const rail = (shape: Shape, offset: number, front: number, z: number, w: number, h: number, d: number, color: string) =>
+        this.stamp(shape, x + (vertical ? -front : offset), y + (vertical ? offset : front),
+          z, w, h, d, color, vertical ? Math.PI / 2 : 0, alpha);
+      for (const side of [-1, 1]) {
+        rail('block', side * (span / 2 - 5), 0, 41, 10, 82, depth + 4, '#8d7868');
+      }
+      const cells = Math.max(6, Math.round(span / 17));
+      for (let column = 1; column < cells; column++) {
+        const dx = (column / cells - .5) * span;
+        rail('block', dx, 0, 38, 6, 75, 9, metal);
+        rail('crown', dx, 0, 77, 8, 10, 9, '#ad8d5d');
+      }
+      for (const z of [17, 54, 70]) rail('block', 0, 0, z, span, 6, 11, metal);
+      for (const face of [-1, 1]) {
+        rail('block', 0, face * 7, 42, 28, 24, 7, '#b89a61');
+        rail('block', 0, face * 12, 42, 5, 9, 3, '#574353');
+      }
+      return;
+    }
     if (s.kind === 'train') { this.trainCar(s,g,x,y); return; }
     if(s.t===1) {
       this.stamp('drum',x,y,9,s.r*2,18,s.r*2,s.kind==='barrel'?'#b9573f':'#786549');
@@ -417,10 +547,114 @@ export class WorldRenderer3D {
     const {x,y,scale,rot,kind}=prop;
     const block=(dx:number,dy:number,z:number,w:number,h:number,d:number,color:string,angle=rot)=>
       this.stamp('block',x+dx*Math.cos(rot)-dy*Math.sin(rot),y+dx*Math.sin(rot)+dy*Math.cos(rot),z,w*scale,h*scale,d*scale,color,angle);
-    const part = (shape: Shape, dx: number, dy: number, z: number, w: number, h: number, d: number, color: string, pitch = 0, opacity = 1) =>
+    const part = (shape: Shape, dx: number, dy: number, z: number, w: number, h: number, d: number, color: string, pitch = 0, opacity = 1, roll = 0) =>
       this.stamp(shape, x + scale * (dx * Math.cos(rot) - dy * Math.sin(rot)),
-        y + scale * (dx * Math.sin(rot) + dy * Math.cos(rot)), z * scale, w * scale, h * scale, d * scale, color, rot, this.actorAlpha * opacity, pitch);
+        y + scale * (dx * Math.sin(rot) + dy * Math.cos(rot)), z * scale, w * scale, h * scale, d * scale, color, rot, this.actorAlpha * opacity, pitch, roll);
     switch (kind) {
+      case 'wall_rubble':
+        part('groundPatch', 0, 0, .4, 72, 1, 49, '#625947', 0, .62);
+        for (const [dx, dy, h, color] of [[-22, -9, 13, '#777264'], [-13, 7, 16, '#a29680'],
+          [-1, -5, 24, '#8c826d'], [12, 13, 10, '#8a826f'], [24, -7, 9, '#a89b85']] as const) {
+          part('crown', dx, dy, h * .33, h * 1.4, h, h * .93, color);
+        }
+        return;
+      case 'outpost_aav': {
+        const paint = prop.paint ?? '#65724d';
+        const trim = '#3b4840', panel = '#8d9b82';
+        part('round', 0, 0, .28, 125, .45, 77, '#425357', 0, .31);
+        for (const side of [-1, 1]) {
+          part('tankTrack', 0, side * 26, 9.5, 106, 19, 15, '#282f2d');
+          for (let wheel = 0; wheel < 6; wheel++) {
+            const axle = (wheel - 2.5) * 14.5;
+            part('tankWheel', axle, side * 33.2, 8.5, 11.2, 11.2, 2.8, '#788475');
+            part('tankWheel', axle, side * 34.75, 8.5, 4.3, 4.3, 1.1, '#495548');
+          }
+          part('block', 3, side * 27.7, 24, 88, 2, 3.5, trim);
+          for (const end of [-1, 1]) part('block', end * 36, side * 29.7, 28.2, 10, 6, 2.3, '#83907b');
+        }
+        part('aavHull', 0, 0, 28.5, 118, 26, 62, paint);
+        // The wide bow ramp follows the forward rake of the hull.
+        part('block', -51, 0, 29, 1.5, 24, 45, '#78846a', 0, 1, .59);
+        for (const side of [-1, 1]) {
+          part('block', -51.6, side * 18, 29, 2, 22, 2.1, trim, 0, 1, .59);
+          part('block', -56, side * 23, 36, 4, 3, 5, '#d6d7a7');
+        }
+        part('block', 23, 0, 42.1, 51, 2.8, 39, trim);
+        part('block', 24, -10, 44, 45, 1.6, 15, panel);
+        part('block', 24, 10, 44, 45, 1.6, 15, '#758468');
+        for (const side of [-1, 1]) part('block', 48, side * 26, 43, 12, 4, 9, '#bbc3ae');
+        part('drum', -20, -5, 43, 25, 3, 25, trim);
+        part('tankArmor', -21, -5, 47, 22, 9, 22, paint);
+        part('tankBarrel', -39, -5, 47, 27, 2.5, 2.5, '#35423c');
+        return;
+      }
+      case 'outpost_btr': {
+        const paint = prop.paint ?? '#a39b80';
+        const trim = '#49514a', hatch = '#808b7d';
+        part('round', 0, 0, .27, 126, .45, 80, '#425357', 0, .31);
+        part('block', 0, 0, 11, 91, 11, 34, '#4a5654');
+        for (const side of [-1, 1]) {
+          for (const axle of [-41, -16, 13, 39]) {
+            part('tankWheel', axle, side * 31, 10.3, 20.6, 20.6, 12.5, '#252c2e');
+            part('tankWheel', axle, side * 37.65, 10.3, 11.7, 11.7, 1.2, '#5b6761');
+            part('tankWheel', axle, side * 38.5, 10.3, 5.1, 5.1, .9, '#9ba498');
+          }
+          part('block', 17, side * 25.8, 24, 23, 5, 2, trim);
+        }
+        part('btrHull', 0, 0, 20, 121, 17.5, 58, trim);
+        part('tankArmor', 2, 0, 28, 110, 12, 56, paint);
+        part('block', -34, 0, 32.29, 12, 1.1, 24, hatch, 0, 1, .46);
+        for (const side of [-1, 1]) {
+          part('block', 26, side * 10, 34.4, 18, 1.4, 13, '#bdc1ac');
+          part('block', -36.3, side * 7, 32, 5.6, 1, 6, '#3c4c4f', 0, 1, .46);
+          part('block', -54, side * 15, 26, 3, 3, 4, '#e0d3a8');
+        }
+        part('drum', -9, 0, 34, 25, 3, 25, trim);
+        part('tankArmor', -9, 0, 39.25, 24, 10, 24, paint);
+        part('tankBarrel', -28, 0, 39, 24, 3.1, 3.1, '#46534e');
+        part('block', 40, 0, 34.6, 9, 1.1, 29, trim);
+        return;
+      }
+      case 'outpost_tank': {
+        const paint = prop.paint ?? '#93a29a';
+        const armorShade = '#51615d', panel = '#b5c3be', track = '#262f34';
+        part('round', 0, 0, .32, 122, .5, 76, '#425357', 0, .34);
+        for (const side of [-1, 1]) {
+          part('tankTrack', 0, side * 26, 10, 108, 20, 16, track);
+          for (let i = 0; i < 6; i++) {
+            const axle = (i - 2.5) * 15;
+            part('tankWheel', axle, side * 34.4, 9.1, 13.2, 13.2, 3.5, '#596769');
+            part('tankWheel', axle, side * 36.2, 9.1, 5.2, 5.2, 1.3, '#899a96');
+          }
+          for (const end of [-1, 1]) part('tankWheel', end * 47, side * 34, 12, 10, 10, 2, '#697773');
+          for (let i = 0; i < 4; i++) {
+            const axle = (i - 1.5) * 23;
+            part('block', axle, side * 33.7, 18.6, 21, 6, 3.2, i % 2 ? armorShade : paint);
+          }
+          for (let i = 0; i < 11; i++) {
+            part('block', (i - 5) * 8.8, side * 26, 19.7, 1.9, 1.1, 12, '#596063');
+          }
+        }
+        // Sloped hull and turret sit above a pair of visible track assemblies.
+        part('tankArmor', 0, 0, 24, 108, 16, 61, paint);
+        part('block', 32, 0, 32.1, 27, 1.1, 37, armorShade);
+        part('block', -19, -13, 32.25, 17, .8, 12, panel);
+        part('block', -19, 13, 32.25, 17, .8, 12, '#6e8380');
+        for (const offset of [-11, -4, 4, 11]) part('block', 35, offset, 33.1, 19, 1, 1.3, '#34464b');
+        part('drum', 7, 0, 33.5, 36, 4, 36, '#424e50');
+        part('tankArmor', 5, 0, 41.5, 53, 16, 44, paint);
+        part('block', 8, -11, 50, 21, 1.3, 10, '#d6ded9');
+        part('drum', 14, 9, 50.6, 13, 3.8, 12, armorShade);
+        part('block', 17, 9, 53, 4.2, 1.5, 3, panel);
+        part('block', 28, -13, 42.5, 11, 7, 9, armorShade);
+        part('block', 28, 13, 42.5, 11, 7, 9, '#758884');
+        part('block', -18, 0, 43, 9, 11, 16, armorShade);
+        part('tankBarrel', -46, 0, 43.6, 54, 5.6, 5.6, '#46565a');
+        part('tankBarrel', -50, 0, 43.6, 22, 7.2, 7.2, '#8b9d9a');
+        part('tankBarrel', -76, 0, 43.6, 12, 8, 8, '#566969');
+        part('tankBarrel', -81.7, 0, 43.6, 1, 4.8, 4.8, '#283439');
+        return;
+      }
       case 'royal_flagpole':
         part('drum', 0, 0, 4, 20, 8, 20, '#8c7d72');
         part('drum', 0, 0, 9, 14, 4, 14, '#c9ab73');
@@ -429,15 +663,17 @@ export class WorldRenderer3D {
       case 'castle_steps': {
         const length = prop.len ?? 60;
         const width = prop.width ?? 100;
+        const gold = prop.paint;
         const steps = Math.ceil(length / 13);
         const depth = length / steps;
         for (let i = 0; i < steps; i++) {
           const height = 2 + (steps - i - 1) * 1.45;
           const stepX = -length / 2 + (i + .5) * depth;
-          part('block', stepX, 0, height / 2, depth, height, width, i % 2 ? '#a69b8e' : '#b8ac9e');
-          part('block', stepX + depth / 2 - 1, 0, height, 2, .8, width, '#d9c9ae');
+          const tread = gold ? (i % 2 ? '#bd8734' : gold) : (i % 2 ? '#a69b8e' : '#b8ac9e');
+          part('block', stepX, 0, height / 2, depth, height, width, tread);
+          part('block', stepX + depth / 2 - 1, 0, height, 2, .8, width, gold ? '#ffdc79' : '#d9c9ae');
           for (const side of [-1, 1]) part('block', stepX, side * (width / 2 - 3), height + 1,
-            depth, 2, 6, '#97764d');
+            depth, 2, 6, gold ? '#e4aa42' : '#97764d');
         }
         return;
       }
@@ -499,6 +735,95 @@ export class WorldRenderer3D {
           }
         }
         return;
+      case 'royal_flowerbed': {
+        part('block', 0, 0, 4, 108, 8, 50, '#766959');
+        part('block', 0, 0, 8, 101, 2, 43, '#564532');
+        for (const side of [-1, 1]) {
+          part('block', 0, side * 23, 9, 108, 4, 4, '#c3b391');
+          part('block', side * 52, 0, 9, 4, 4, 46, '#c3b391');
+        }
+        const blooms = ['#e99ac5', '#f1d480', '#b870b2', '#f5b0a5', '#eee2bd'];
+        for (let row = 0; row < 3; row++) {
+          for (let column = 0; column < 6; column++) {
+            const dx = (column - 2.5) * 15 + (row === 1 ? 3 : 0);
+            const dy = (row - 1) * 12;
+            const height = 13 + (row + column) % 3;
+            part('crown', dx, dy, 10.5, 14, 6, 12, (row + column) % 2 ? '#698755' : '#456f4d');
+            part('round', dx, dy, height, 8.5, 5.4, 8.5, blooms[(row * 2 + column) % blooms.length]);
+            part('round', dx, dy, height + 2.4, 2.8, 1.6, 2.8, '#f5ce69');
+          }
+        }
+        return;
+      }
+      case 'palace_fountain': {
+        part('drum', 0, 0, 1.5, 150, 3, 110, '#a4916c');
+        part('drum', 0, 0, 3, 145, 2, 105, '#748258');
+        part('drum', 0, 0, 5, 116, 5, 88, '#ada18b');
+        part('fountainBowl', 0, 0, 12, 114, 13, 86, '#d3c4a5');
+        part('drum', 0, 0, 16.6, 101, 1, 74, '#569395');
+        part('flutedColumn', 0, 0, 23, 27, 16, 27, '#ccbea2');
+        part('fountainBowl', 0, 0, 32, 55, 14, 55, '#e0d2b4');
+        part('drum', 0, 0, 37.7, 49, 1, 49, '#77aeb0');
+        part('flutedColumn', 0, 0, 42, 14, 12, 14, '#d3c4a5');
+        part('fountainBowl', 0, 0, 50, 27, 10, 27, '#e0d2b4');
+        part('drum', 0, 0, 54, 24, 1, 24, '#83b4b0');
+        const cycle = this.animT * 1.3;
+        for (let i = 0; i < 4; i++) {
+          const angle = Math.PI / 4 + i * Math.PI / 2;
+          const dx = Math.cos(angle) * 25, dy = Math.sin(angle) * 25;
+          part('drum', dx, dy, 27, 1.8, 21, 1.8, '#c6ebe4', 0, .55);
+          const ripple = ((cycle * .48 + i / 4) % 1);
+          part('ring', dx, dy, 17.3, 5 + ripple * 14, 1.4, 5 + ripple * 14, '#cbede4', 0, (1 - ripple) * .8);
+          const phase = (cycle + i / 4) % 1;
+          part('round', Math.cos(angle) * phase * 11, Math.sin(angle) * phase * 11,
+            55 + 48 * phase * (1 - phase), 2.3, 5, 2.3, '#d7f1ec');
+        }
+        return;
+      }
+      case 'greek_column':
+        part('block', 0, 0, 3, 48, 6, 48, '#ac9a80');
+        part('block', 0, 0, 8, 40, 5, 40, '#d1c1a6');
+        part('drum', 0, 0, 12, 34, 4, 34, '#dfd0b2');
+        part('flutedColumn', 0, 0, 46, 29, 66, 29, '#e0d2b6');
+        part('drum', 0, 0, 79.5, 27, 3, 27, '#bcac90');
+        part('drum', 0, 0, 83, 34, 5, 34, '#d9cbae');
+        part('block', 0, 0, 88, 37, 5, 37, '#e5d8bc');
+        return;
+      case 'triumphal_arch': {
+        const stone = '#d6c6a9', trim = '#eadbbe', shade = '#aa967b';
+        for (const side of [-1, 1]) {
+          const pier = side * 94;
+          part('block', pier, 0, 4, 64, 8, 76, shade);
+          part('block', pier, 0, 11, 58, 6, 70, trim);
+          for (let i = 0; i < 5; i++) {
+            part('block', pier, 0, 21.6 + i * 15.7, 54, 15.2, 58, i % 2 ? '#c3b394' : stone);
+          }
+          for (const face of [-1, 1]) {
+            part('block', pier, face * 31, 16, 30, 7, 10, trim);
+            part('flutedColumn', pier, face * 31, 51, 21, 65, 17, trim);
+            part('block', pier, face * 31, 85, 29, 6, 13, trim);
+          }
+          part('block', pier, 0, 90, 57, 5, 65, shade);
+        }
+        part('archSpandrel', 0, 0, 91, 92, 92, 54, stone);
+        for (let i = 0; i < ARCH_STONES; i++) {
+          const angle = (i - (ARCH_STONES - 1) / 2) * Math.PI / ARCH_STONES;
+          const keystone = i === (ARCH_STONES - 1) / 2;
+          part('archStone', 0, 0, 91, 92, 92, keystone ? 67 : 58,
+            keystone ? trim : i % 2 ? '#c0ae92' : stone, 0, 1, angle);
+        }
+        part('block', 0, 0, 188, 244, 12, 62, shade);
+        part('block', 0, 0, 204, 242, 22, 62, stone);
+        part('block', 0, 0, 218, 252, 6, 71, trim);
+        for (const face of [-1, 1]) {
+          part('block', 0, face * 31.5, 204, 91, 15, 3, '#99846b');
+          part('block', 0, face * 33.5, 204, 85, 10, 2, '#c5b08d');
+          for (const side of [-1, 1]) for (let i = 0; i < 4; i++) {
+            part('block', side * (61 + 15 * i), face * 31.5, 209, 6, 7, 3, trim);
+          }
+        }
+        return;
+      }
       case 'fountain': {
         part('drum', 0, 0, 3, 84, 6, 72, '#626962');
         part('drum', 0, 0, 9, 78, 8, 66, '#8d8f81');
@@ -1303,7 +1628,7 @@ export class WorldRenderer3D {
     }
   }
 
-  private bird(x:number,y:number,r:number,angle:number,body:string,gear:string,armed:boolean,walk:number,boss:boolean,chicken:boolean,flash:boolean,roll:boolean,bossType?:Enemy['type']) {
+  private bird(x:number,y:number,r:number,angle:number,body:string,gear:string,armed:boolean,walk:number,boss:boolean,chicken:boolean,flash:boolean,roll:boolean,bossType?:Enemy['type'],hero?:string) {
     const ca=Math.cos(angle),sa=Math.sin(angle),bob=Math.sin(walk)*r*.075;
     const part=(shape:Shape,dx:number,dy:number,z:number,w:number,h:number,d:number,col:string,extraAngle=0) => {
       this.stamp(shape,x+r*(dx*ca-dy*sa),y+r*(dx*sa+dy*ca),Math.max(.2,(z+bob/r)*r)*(roll ? .65 : 1),w*r,h*r*(roll ? .72 : 1),d*r,col,angle+extraAngle);
@@ -1488,7 +1813,22 @@ export class WorldRenderer3D {
         for (const side of [-1,1])part('block',.12,.74+side*.11,1.62,.67,.12,.13,'#34424d');
       }
     } else {
-      if (bossType !== 'hen') {
+      if (hero === 'tank') {
+        // 铁头：圆圆的绿色军用头盔，灰绿重甲配色不变。
+        part('drum', .26, 0, 1.86, 1.36, .12, 1.36, '#3f5730');
+        part('round', .26, 0, 2.08, 1.18, .66, 1.22, '#5d7a45');
+        part('round', .26, 0, 2.37, .54, .18, .54, '#6b8a50');
+        part('block', .86, 0, 1.97, .32, .10, .82, '#3f5730');
+        for (const side of [-1, 1]) part('block', .34, side*.58, 1.76, .14, .22, .12, '#38492b');
+      } else if (hero === 'scout') {
+        // 快羽：淡蓝鸭身 + 红色缎带，额带绕头、脑后蝴蝶结并留两条飘带。
+        part('block', .92, 0, 1.94, .10, .12, .86, '#d6403a');
+        for (const side of [-1, 1]) part('block', .46, side*.56, 1.94, .58, .10, .10, '#d6403a');
+        part('round', -.22, 0, 1.92, .24, .24, .24, '#b52f2a');
+        for (const side of [-1, 1]) part('round', -.34, side*.15, 1.99, .17, .15, .11, '#e0554c', side*.4);
+        part('block', -.82, .10, 1.52, 1.08, .15, .28, '#d6403a', Math.sin(walk)*.18-.12);
+        part('block', -.96, -.16, 1.40, .72, .13, .22, '#b52f2a', Math.sin(walk)*-.14+.10);
+      } else if (bossType !== 'hen') {
         part('round',.28,0,2.05,1.27,.42,1.24,gear);
         part('block',.61,0,2.01,.93,.1,1.04,gear);
       }
@@ -1569,6 +1909,71 @@ export class WorldRenderer3D {
     }
   }
 
+  private bossBurstWarning(e: Enemy, range: number, windup: number) {
+    const frost = e.type === 'frostMarshal';
+    const progress = Math.max(0, Math.min(1, 1 - e.specialT / windup));
+    const color = frost ? '#7bddff' : '#ffcc65';
+    const pulse = .48 + progress * .22 + .16 * Math.sin(this.animT * 22);
+    this.stamp('round', e.x, e.y, 1.5, range * 2, 2, range * 2, frost ? '#4a9fc3' : '#ba8032', 0, .15 + progress * .09);
+    this.stamp('ring', e.x, e.y, 3, range * 2, 4.5, range * 2, frost ? '#237aab' : '#a07638', 0, .95);
+    this.stampGlow('ring', e.x, e.y, 4, range * 2, 6, range * 2, color, 0, pulse);
+    const inner = range * (.22 + progress * .75);
+    this.stampGlow('ring', e.x, e.y, 4, inner * 2, 4, inner * 2, color, 0, pulse * .62);
+    for (let i = 0; i < 20; i++) {
+      const angle = i * TAU / 20;
+      const x = e.x + Math.cos(angle) * range * .98;
+      const y = e.y + Math.sin(angle) * range * .98;
+      this.stamp(frost ? 'crown' : 'drum', x, y, 5 + progress * 4, 10, frost ? 14 : 3, 10, color, angle);
+    }
+  }
+
+  private frostBurst({ x, y, range, age, duration }: BossBurst) {
+    const t = age / duration;
+    const fade = 1 - t;
+    const radius = range * Math.min(1, .12 + 2.6 * t);
+    if (t < .55) this.stampGlow('ring', x, y, 5, radius * 2, 7, radius * 2, '#9beaff', 0, .88 * fade);
+    for (let i = 0; i < 62; i++) {
+      const angle = i * 2.399963;
+      const speed = .43 + (i % 11) * .054;
+      const distance = Math.min(range * .98, (radius * .86 + range * t * .32) * speed);
+      const px = x + Math.cos(angle) * distance, py = y + Math.sin(angle) * distance;
+      if (i % 4 === 0) {
+        const spread = 35 + (i % 7) * 9 + t * 50;
+        this.stamp('round', px, py, 7 + t * 22, spread, spread * .28, spread * .69, '#b8eaff', angle, fade * .33);
+        continue;
+      }
+      const height = 6 + Math.sin(Math.PI * t) * (23 + (i % 7) * 10);
+      const length = 9 + (i % 5) * 4;
+      this.stamp('crown', px, py, height, length * .46, length, length * .47,
+        i % 3 ? '#8bddff' : '#e7fbff', angle, fade, .37, .47 + t);
+      if (i % 5 === 0) this.stampGlow('round', px, py, height, 8, 8, 8, '#67dbff', 0, fade * .68);
+    }
+  }
+
+  private coinBurst({ x, y, range, age, duration }: BossBurst) {
+    const fade = Math.min(1, (duration - age) / .23);
+    if (age < .42) this.stampGlow('ring', x, y, 5, range * 2, 6, range * 2, '#ffca64', 0, .74 * (1 - age / .42));
+    for (let i = 0; i < 42; i++) {
+      const angle = i * 2.399963;
+      const distance = Math.sqrt((i + .5) / 42) * range * .93;
+      const px = x + Math.cos(angle) * distance, py = y + Math.sin(angle) * distance;
+      const fall = (age - (i % 9) * .046) / (.46 + (i % 4) * .045);
+      if (fall < 0 || fall >= 1.34) continue;
+      if (fall >= 1) {
+        const impact = (fall - 1) / .34;
+        const ring = 8 + impact * 20;
+        this.stampGlow('ring', px, py, 3, ring, 3, ring, '#ffd989', 0, (1 - impact) * fade);
+        continue;
+      }
+      const z = 6 + (122 + (i % 5) * 14) * (1 - fall * fall);
+      const diameter = 13 + (i % 4) * 2;
+      const spin = i + fall * TAU * 1.3;
+      this.stamp('drum', px, py, z, diameter, 3.6, diameter, '#be7924', angle, fade, spin, spin * .35);
+      this.stamp('drum', px, py, z, diameter * .75, 4.3, diameter * .75, '#ffe28a', angle, fade, spin, spin * .35);
+      this.stampGlow('round', px, py, z + 15, 3, 20, 3, '#ffbd56', 0, fade * fall * .53);
+    }
+  }
+
   private burningGround(f: FireZone) {
     const fade = Math.min(1, Math.max(.18, (f.t + .12) / .25), Math.max(0, (f.dur - f.t) / .8));
     if (fade <= 0) return;
@@ -1616,9 +2021,34 @@ export class WorldRenderer3D {
     const visible=(x:number,y:number,margin=100)=>Math.abs(x-center.x)<hw+margin && Math.abs(y-center.y)<hh/tilt+margin;
     for(const s of g.map.solids)if(visible(s.x,s.y,Math.max(s.w,s.h)+100))this.cover(s,g);
     for(const floor of g.map.floors)if(visible(floor.x+floor.w/2,floor.y+floor.h/2,Math.max(floor.w,floor.h)))this.house(floor,g);
-    for(const prop of g.map.props)if(visible(prop.x,prop.y,120)) {
-      this.actorAlpha=this.behindPlayer(g,prop.x,prop.y,100*prop.scale,100*prop.scale,70) ? .22 : 1;
-      this.lowPolyProp(prop); this.actorAlpha=1;
+    for (const prop of g.map.props) {
+      const arch = prop.kind === 'triumphal_arch';
+      if (!visible(prop.x, prop.y, arch ? 240 : 120)) continue;
+      this.actorAlpha = this.behindPlayer(g, prop.x, prop.y, (arch ? 252 : 100) * prop.scale,
+        (arch ? 76 : 100) * prop.scale, arch ? 221 : 70) ? .22 : 1;
+      this.lowPolyProp(prop);
+      this.actorAlpha = 1;
+    }
+    const stages = g.map.gauntlet;
+    if (g.mode === 'raid' && stages) for (let i = 0; i < stages.length - 1; i++) {
+      const { x, y } = stages[i].entrance;
+      if (!visible(x, y)) continue;
+      const open = i <= g.gauntletStage;
+      for (const side of [-1, 1]) {
+        const lx = x + side * 68, ly = y - 27;
+        this.stamp('block', lx, ly, 6, 15, 12, 15, '#484240');
+        this.stamp('block', lx, ly, 14, 12, 5, 12, open ? '#4cb486' : '#d65044');
+        this.stampGlow('block', lx, ly, 17, 10, 4, 10, open ? '#68ffae' : '#ff6352', 0, .85);
+      }
+    }
+    const entrance = stages?.[g.gauntletStage]?.entrance;
+    if (g.mode === 'raid' && entrance && visible(entrance.x, entrance.y)) {
+      const { x, y } = entrance;
+      const pulse = .74 + .18 * Math.sin(this.animT * 5);
+      this.stamp('ring', x, y, 1.5, 50, 4, 50, '#ffd467', 0, pulse);
+      for (const side of [-1, 1]) {
+        this.stamp('block', x + side * 6, y, 3, 17, 2, 4, '#fff0aa', side * Math.PI / 4, pulse);
+      }
     }
     for(const pad of g.map.pads)if(pad.type==='field'&&visible(pad.x,pad.y,Math.max(pad.w,pad.h))) {
       for(let row=0;row<Math.floor(pad.h/32);row++) {
@@ -1632,8 +2062,40 @@ export class WorldRenderer3D {
     }
     for(const t of g.map.trees) {
       if(!visible(t.x,t.y,t.r*4))continue;
-      this.stamp('round',t.x+t.r*.15,t.y-t.r*.18,.4,t.r*1.85,.5,t.r*1.65,'#3c513a',0,.25);
       const clear=g.mode==='raid' && Math.abs(t.x-g.player.x)<t.r+12 && t.y>=g.player.y-t.r && t.y-g.player.y<3*t.r;
+      if (t.kind === 'mushroom') {
+        const { x, y, r, v } = t;
+        const angle = v * 1.7 + x * .01;
+        const [shape, color, rim, height] = MUSHROOM_VARIANTS[v];
+        this.stamp('round', x, y, .35, r * 1.58, .45, r * 1.1, '#40382e', angle, .27);
+        this.stamp('drum', x, y, r * .44, r * .35, r * .88, r * .35, '#d5bb92', angle, clear ? .18 : 1);
+        if (clear) continue;
+        this.stamp('drum', x, y, r * .88, r * 1.47, r * .1, r * 1.39, rim, angle);
+        this.stamp(shape, x, y, r * (.88 + height * .45), r * 1.62, r * height, r * (v === 2 ? 1.31 : 1.54), color, angle);
+        if (v === 0) for (let i = 0; i < 4; i++) {
+          const dotAngle = angle + i * 2.4;
+          const offset = r * (.18 + (i % 2) * .24);
+          this.stamp('round', x + Math.cos(dotAngle) * offset, y + Math.sin(dotAngle) * offset,
+            r * (i % 2 ? 1.35 : 1.47), r * .21, r * .075, r * .17, '#f5e0b3', angle);
+        }
+        continue;
+      }
+      this.stamp('round',t.x+t.r*.15,t.y-t.r*.18,.4,t.r*1.85,.5,t.r*1.65,'#3c513a',0,.25);
+      if (t.kind === 'cedar') {
+        const { x, y, r, v } = t;
+        this.stamp('drum', x, y, r * .43, r * .33, r * .86, r * .33, '#68564d', 0, clear ? .18 : 1);
+        if (clear) continue;
+        const height = 1 + v * .08;
+        for (let tier = 0; tier < 4; tier++) {
+          const z = r * (.91 + tier * .51) * height;
+          const width = r * (1.60 - tier * .26);
+          const coneHeight = r * (1.21 - tier * .09) * height;
+          this.stamp('pine', x, y, z, width, coneHeight, width, CEDAR_COLORS[tier], v * .9 + tier * .2);
+          if ((tier + v) % 3 !== 0) this.stamp('pine', x, y, z + coneHeight * .19, width * .68, coneHeight * .71, width * .68,
+            tier === 3 ? '#d9e9e3' : '#bdd2cb', v * .9 + tier * .2);
+        }
+        continue;
+      }
       if (g.mapId === 'hatchery') {
         const { x, y, r, v } = t;
         this.stamp('drum', x, y, r*.66, r*.48, r*1.32, r*.48, '#5d4634', 0, clear ? .18 : 1);
@@ -1647,7 +2109,7 @@ export class WorldRenderer3D {
         this.stamp('crown', x-r*.12, y-r*.14, r*2.07, r*1.08, r*.74, r*.98, '#829359', angle);
         continue;
       }
-      if (g.mapId === 'mausoleum') {
+      if (g.mapId === 'mausoleum' && !t.kind) {
         const { x, y, r, v } = t;
         this.stamp('drum', x, y, r*.42, r*.46, r*.84, r*.46, '#53463a', 0, clear ? .18 : 1);
         if (clear) continue;
@@ -1816,25 +2278,36 @@ export class WorldRenderer3D {
     }
     const p=g.player;
     if(g.mode==='raid' && !p.dead) {
+      // 恢复三名角色的原版配色：小黄亮黄、铁头灰绿重甲、快羽淡蓝。
       const colors = p.character.id==='scout'?['#addee0','#496e73']:p.character.id==='tank'?['#c1c4ae','#58604b']:['#ffd453','#626f4e'];
-      this.bird(p.x,p.y,p.r,p.aim,colors[0],colors[1],!!p.weapons[p.cur],p.walk,false,false,p.flash>0,p.rollT>0);
+      this.bird(p.x,p.y,p.r,p.aim,colors[0],colors[1],!!p.weapons[p.cur],p.walk,false,false,p.flash>0,p.rollT>0,undefined,p.character.id);
       this.stamp('ring',p.x,p.y,1,p.r*2.45,5,p.r*2.45,'#fce999');
     }
     for(const e of g.enemies) {
+      const phase = e.def.encounter?.phases[e.skillPhase];
+      const signature = e.special === 'honkWind' && (e.type === 'frostMarshal' || e.type === 'duckKing');
+      if (!e.dead && signature && phase && visible(e.x, e.y, phase.range + 100)) {
+        this.bossBurstWarning(e, phase.range, phase.windup);
+      }
       if(e.dead || (g.mode==='raid' && e.visA<.03) || !visible(e.x,e.y,420))continue;
       const colors=FEATHER_COLORS[e.type];
       this.actorAlpha=g.mode==='raid'?e.visA:1;
       this.bird(e.x,e.y,e.r,e.aim,colors[0],colors[1],!!e.weapon,e.walk,!!e.def.boss,e.type==='chicken',e.flash>0,false,e.type);
       this.actorAlpha=1;
-      const range=e.def.encounter?.phases[e.skillPhase].range;
+      const range = phase?.range;
       if(e.special==='chargeWind') {
         const len=range??390;
         this.stamp('block',e.x+e.cdx*len/2,e.y+e.cdy*len/2,1,len,1,e.r*2,'#f47858',Math.atan2(e.cdy,e.cdx));
       }
-      if(e.special==='honkWind'||e.special==='summonWind') {
+      if(!signature && (e.special==='honkWind'||e.special==='summonWind')) {
         const radius=e.special==='summonWind'?Math.min(260,(range??260)*.42):range??290;
         this.stamp('ring',e.x,e.y,1.5,radius*2,5,radius*2,e.special==='summonWind'?'#a8ed82':'#ff9c61');
       }
+    }
+    for (const burst of g.bossBursts) {
+      if (!visible(burst.x, burst.y, burst.range + 180)) continue;
+      if (burst.kind === 'frost') this.frostBurst(burst);
+      else this.coinBurst(burst);
     }
     for(const b of g.bullets) {
       if (!visible(b.x,b.y,80)) continue;

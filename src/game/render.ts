@@ -1,5 +1,5 @@
 import { ARMOR_ART_CELL, ENEMIES, EXTRACT_TIME, RARITY_COLORS, RARITY_RGB, SEARCH_TIME, THROWABLE_IDS, THROWABLES, fmtMoney, fmtTime, type CharacterId, type WeaponDef } from './data';
-import { F_SIGHT, type FloorType, type GameMap, type RaidMapId, type Solid } from './map';
+import { F_SIGHT, ROAD_EDGE_WIDTH, ROYAL_PLAZA_BORDER_WIDTH, type FloorType, type GameMap, type RaidMapId, type Solid } from './map';
 import { bagUi, hudScale, type Input } from './input';
 import { FEATHER_COLORS, P_CASING, P_DEBRIS, P_DUST, P_FEATHER, P_FIRE, P_MUZZLE, P_RING, P_SMOKE, P_SPARK, P_STAR, TAU, type Container, type Enemy, type Game } from './game';
 import { drawScenery } from './scenery';
@@ -216,8 +216,17 @@ export function drawMapThumbnail(c: HTMLCanvasElement, m: GameMap, markers = tru
   for (const p of m.pads) if (p.type === 'base' || p.type === 'canopy' || p.type === 'parking' || p.type === 'platform') g.fillRect(p.x, p.y, p.w, p.h);
   g.fillStyle = '#7a6040';
   for (const p of m.pads) if (p.type === 'field') g.fillRect(p.x, p.y, p.w, p.h);
+  const plaza = m.pads.find(p => p.type === 'royal_plaza');
+  if (plaza) {
+    g.fillStyle = '#b7ad94';
+    ell(g, plaza.x + plaza.w / 2, plaza.y + plaza.h / 2, plaza.w / 2, plaza.h / 2);
+    g.strokeStyle = '#716b58';
+    g.lineWidth = ROYAL_PLAZA_BORDER_WIDTH;
+    g.stroke();
+  }
   g.strokeStyle = '#b8995f';
-  g.lineWidth = 50;
+  g.lineWidth = plaza ? ROAD_EDGE_WIDTH : 50;
+  if (plaza) g.lineCap = 'round';
   g.lineJoin = 'round';
   g.stroke(rp);
   g.fillStyle = '#4b93b5';
@@ -2113,6 +2122,17 @@ export class Renderer {
       ctx.fillStyle = '#ffd23f';
       ctx.fillRect(mx + box.x * sc - 3, my + box.y * sc - 3, 6, 6);
     }
+    const stages = g.map.gauntlet;
+    const objective = stages?.[g.gauntletStage];
+    if (objective) {
+      const x = mx + objective.entrance.x * sc, y = my + objective.entrance.y * sc;
+      ctx.fillStyle = '#ffde78';
+      ctx.strokeStyle = '#30231a';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x, y - 6); ctx.lineTo(x + 5, y); ctx.lineTo(x, y + 6); ctx.lineTo(x - 5, y);
+      ctx.closePath(); ctx.fill(); ctx.stroke();
+    }
     for (const e of g.extracts) {
       const pr = 4 + Math.sin(t * 4) * 1.5;
       ctx.fillStyle = '#6dff9e';
@@ -2144,7 +2164,16 @@ export class Renderer {
 
     // --- boss bar
     const narrow = W < 640;
-    const topY = narrow ? 12 + ph + 30 * u : 14;
+    let topY = narrow ? 12 + ph + 30 * u : 14;
+    if (stages) {
+      const label = objective ? `${g.gauntletStage + 1} / ${stages.length} · ${objective.name}` : '王家封印已解除';
+      this.txt(label, W / 2, topY, 14 * u, '#f9d675', 'center', 800);
+      topY += 23 * u;
+      if (objective) {
+        this.txt(objective.direction, W / 2, topY - 4 * u, 12 * u, '#f8e7ae', 'center', 700);
+        topY += 16 * u;
+      }
+    }
     let msgY = topY;
     // Dual-boss encounters show every surviving boss, stacked after each other.
     const activeBosses = g.enemies.filter((e) => e.def.boss && !e.dead).slice(0, 3);

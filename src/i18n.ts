@@ -6,6 +6,20 @@ const STORAGE_KEY = 'duckops3d-locale';
 const DEFAULT_LOCALE: Locale = import.meta.env.MODE === 'english' ? 'en' : 'zh';
 
 const ENTRIES: [string, string][] = [
+  ['四将军试炼、双王城堡与封印御花园', 'Four generals, the royal duo, and the sealed garden'],
+  ['击败六名首领后开放王家宝库与御花园', 'Defeat all six bosses to open the royal vaults and garden'],
+  ['地狱 · 六首领', 'Hell · Six bosses'], ['四将军 → 孵巢鸭后与鸭王', 'Four generals → Broodqueen and Duck King'],
+  ['向北挑战四将军 · 城堡内迎战鸭后与鸭王', 'Head north through four generals · Face the Broodqueen and King in the castle'],
+  ['宝库、御花园和撤离点将在双首领击败后开放', 'Defeat both royal bosses to open the vaults, garden, and exits'],
+  ['击败另一位首领才会解除王家封印', 'Defeat the other royal boss to break the seal'],
+  ['闸门已开放 · 下一站：', 'Gate open · Next: '],
+  ['烈焰机库', 'Flame Hangar'], ['雷达指挥厅', 'Radar Command Hall'], ['中央旗庭', 'Central Flag Court'],
+  ['西侧塌墙', 'West Wall Breach'], ['东侧塌墙', 'East Wall Breach'],
+  ['王家宝库、御花园和撤离点已开放', 'The royal vaults, garden, and exits are open'],
+  ['王家封印已解除', 'Royal seal broken'], ['潮汐船坞', 'Tidal Dock'], ['熔炉大厅', 'Furnace Hall'],
+  ['寒晶议事厅', 'Frostcrystal Hall'], ['铁壁军械厅', 'Ironwall Armory'], ['南侧集结营地', 'Southern Staging Camp'],
+  ['御花园北门', 'Royal Garden North Gate'], ['宝库东廊', 'East Vault Passage'],
+  ['王家西宝库', 'West Royal Vault'], ['王家东宝库', 'East Royal Vault'], ['御花园', 'Royal Garden'],
   // Core UI and raid language
   ['鸭鸭鸭行动 3D', 'Duck Duck Extraction 3D'], ['搜 · 打 · 撤', 'Loot · Fight · Extract'],
   ['搜刮物资，活着撤离', 'Loot gear and make it out alive'], ['行动开始 · 搜刮物资，活着撤离', 'Raid started · Loot gear and make it out alive'],

@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Game } from './game';
-import { ROAD_EDGE_WIDTH } from './map';
+import { ROAD_EDGE_WIDTH, ROYAL_PLAZA_BORDER_WIDTH } from './map';
 
 const biome = {
   island: ['#75885a', '#bbab80'], harbor: ['#71827e', '#a7a99b'],
@@ -59,7 +59,7 @@ function paintLavaGround(c: CanvasRenderingContext2D, floor: Game['map']['floors
 export function createTerrain(game: Game) {
   const map = game.map;
   const canvas = document.createElement('canvas');
-  const density = Math.min(1.4, 2048 / Math.max(map.w, map.h));
+  const density = Math.min(1.4, (map.gauntlet ? 3072 : 2048) / Math.max(map.w, map.h));
   canvas.width = Math.ceil(map.w * density);
   canvas.height = Math.ceil(map.h * density);
   const c = canvas.getContext('2d')!;
@@ -76,6 +76,22 @@ export function createTerrain(game: Game) {
   }
   for (const p of map.pads) {
     if (p.type === 'nest_ground') continue;
+    if (p.type === 'royal_plaza') {
+      const x = p.x + p.w / 2, y = p.y + p.h / 2;
+      c.beginPath(); c.ellipse(x, y, p.w / 2, p.h / 2, 0, 0, Math.PI * 2);
+      c.fillStyle = '#b7ad94'; c.fill();
+      c.lineWidth = ROYAL_PLAZA_BORDER_WIDTH; c.strokeStyle = '#716b58'; c.stroke();
+      c.beginPath(); c.ellipse(x, y, p.w / 2 - 25, p.h / 2 - 25, 0, 0, Math.PI * 2);
+      c.lineWidth = 5; c.strokeStyle = '#d6c6a3'; c.stroke();
+      c.save(); c.clip();
+      c.strokeStyle = 'rgba(80,68,50,.16)'; c.lineWidth = 1.4; c.beginPath();
+      for (let py = p.y; py < p.y + p.h; py += 54) { c.moveTo(p.x, py); c.lineTo(p.x + p.w, py); }
+      for (let px = p.x; px < p.x + p.w; px += 54) { c.moveTo(px, p.y); c.lineTo(px, p.y + p.h); }
+      c.stroke(); c.restore();
+      c.beginPath(); c.arc(x, y, 131, 0, Math.PI * 2);
+      c.fillStyle = '#8b7471'; c.fill(); c.lineWidth = 7; c.strokeStyle = '#ccb38a'; c.stroke();
+      continue;
+    }
     if (p.type === 'royal_garden') {
       c.fillStyle = '#777260';
       c.fillRect(p.x, p.y, p.w, p.h);
@@ -124,8 +140,38 @@ export function createTerrain(game: Game) {
   }
   const paintFloor = (f: Game['map']['floors'][number]) => {
     const wood = f.type === 'wood';
-    c.fillStyle = wood ? '#b69b71' : f.type === 'tile' ? '#ccd0bc' : '#a7aca0';
+    const themeColors = {
+      air: ['#6b6760', '#d3a259'],
+      radar: ['#72838a', '#9bc4ce'],
+      frost: ['#a0b5ba', '#d2e2e6'],
+      guard: ['#727c6d', '#aca77a'],
+      royal: ['#b59f83', '#72585e'],
+    } as const;
+    const theme = f.theme ? themeColors[f.theme] : undefined;
+    c.fillStyle = theme?.[0] ?? (wood ? '#b69b71' : f.type === 'tile' ? '#ccd0bc' : '#a7aca0');
     c.fillRect(f.x,f.y,f.w,f.h);
+    if (theme) {
+      const center = f.x + f.w / 2;
+      const sideDye = f.theme === 'royal' ? 36 : 28;
+      c.fillStyle = theme[1];
+      c.fillRect(f.x + sideDye, f.y + 24, 9, f.h - 48);
+      c.fillRect(f.x + f.w - sideDye - 9, f.y + 24, 9, f.h - 48);
+      if (f.theme === 'royal') {
+        c.fillRect(center - 54, f.y + 14, 108, f.h - 28);
+        c.fillStyle = '#c69564';
+        c.fillRect(center - 49, f.y + 18, 3, f.h - 36);
+        c.fillRect(center + 46, f.y + 18, 3, f.h - 36);
+      } else if (f.theme === 'air' || f.theme === 'guard') {
+        for (const side of [-1, 1]) for (let y = f.y + 44; y < f.y + f.h - 30; y += 34) {
+          c.save(); c.translate(center + side * 240, y); c.rotate(side * -.40);
+          c.fillRect(-12, -3, 24, 6); c.restore();
+        }
+      } else {
+        c.globalAlpha = .36;
+        for (const side of [-1, 1]) c.fillRect(center + side * 293 - 28, f.y + 34, 56, f.h - 68);
+        c.globalAlpha = 1;
+      }
+    }
     c.strokeStyle = 'rgba(50,54,45,.21)'; c.lineWidth = 1.3; c.beginPath();
     for (let y = f.y; y <= f.y + f.h; y += wood ? 15 : 52) { c.moveTo(f.x,y); c.lineTo(f.x+f.w,y); }
     for (let x = f.x; x <= f.x + f.w; x += wood ? 94 : 52) { c.moveTo(x,f.y); c.lineTo(x,f.y+f.h); }
