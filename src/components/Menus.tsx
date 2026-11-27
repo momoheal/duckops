@@ -10,6 +10,7 @@ import LevelPicker from './LevelPicker';
 import LobbyDialog from './LobbyDialog';
 import Portrait from './Portrait';
 import GearIcon from './GearIcon';
+import { CONSUMABLE_EMOJI_TO_ID, consumableIconDataUrl } from '../game/gear-icons';
 import { getLocale, setLocale, useLocale } from '../i18n';
 
 const OUTCOME: Record<string, { label: string; cls: string }> = {
@@ -79,7 +80,7 @@ export function ScoreTable({ scores, highlight = -1, compact = false }: { scores
                 {s.mapId && getRaidMap(s.mapId).name}{s.mapId && s.characterId && ' · '}{s.characterId && getCharacter(s.characterId).name}
               </span>}
             <span className="block truncate text-[11px] text-white/45">
-              {s.best ? <span style={{ color: RARITY_COLORS[s.bestR ?? 0] }}>{s.bestIcon?.startsWith('gear:') ? <GearIcon id={s.bestIcon.slice(5)} className="mr-1 inline-block size-4 align-middle" /> : s.bestIcon === 'GUN' ? '🔫' : s.bestIcon} {s.best}</span> : '—'}
+              {s.best ? <span style={{ color: RARITY_COLORS[s.bestR ?? 0] }}>{s.bestIcon?.startsWith('gear:') ? <GearIcon id={s.bestIcon.slice(5)} className="mr-1 inline-block size-4 align-middle" /> : s.bestIcon && CONSUMABLE_EMOJI_TO_ID[s.bestIcon] ? <img className="mr-1 inline-block size-4 align-middle" src={consumableIconDataUrl(CONSUMABLE_EMOJI_TO_ID[s.bestIcon]!)} alt="" draggable={false} /> : s.bestIcon === 'GUN' ? '🔫' : s.bestIcon} {s.best}</span> : '—'}
               <span className="ml-2">{s.kills}杀 · {fmtTime(s.time)}</span>
             </span>
           </span>
@@ -460,7 +461,7 @@ export function GameOverScreen({ data, scores, onRetry, onMenu, canRetryKit }: {
               <div className="grid grid-cols-5 gap-1.5 sm:grid-cols-10">
                 {r.items.map((it, i) => (
                   <div key={i} className="anim-pop relative flex flex-col items-center rounded-lg border px-1 py-1.5" style={{ borderColor: RARITY_COLORS[it.rarity], background: `linear-gradient(180deg, rgba(${RARITY_RGB[it.rarity]},0.06), rgba(${RARITY_RGB[it.rarity]},0.35))`, animationDelay: `${300 + i * 45}ms` }}>
-                    {it.icon.startsWith('gear:') ? <GearIcon id={it.icon.slice(5)} className="size-12" /> : <span className="text-2xl leading-none">{it.icon === 'GUN' ? '🔫' : it.icon}</span>}
+                    {it.icon.startsWith('gear:') ? <GearIcon id={it.icon.slice(5)} className="size-12" /> : CONSUMABLE_EMOJI_TO_ID[it.icon] ? <img className="size-12 object-contain" src={consumableIconDataUrl(CONSUMABLE_EMOJI_TO_ID[it.icon]!)} alt="" draggable={false} /> : <span className="text-2xl leading-none">{it.icon === 'GUN' ? '🔫' : it.icon}</span>}
                     <span className="mt-1 w-full truncate text-center text-[10px] text-white/85">{it.name}</span>
                     <span className="font-num text-[10px] font-bold text-[#ffcf4a]">{it.value >= 10000 ? `${(it.value / 10000).toFixed(1)}万` : fmtMoney(it.value)}</span>
                     {!ok && <div className="absolute inset-0 grid place-items-center rounded-lg bg-black/60 text-[10px] font-black text-red-300">已丢失</div>}

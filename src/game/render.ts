@@ -3,7 +3,7 @@ import { F_SIGHT, ROAD_EDGE_WIDTH, ROYAL_PLAZA_BORDER_WIDTH, type FloorType, typ
 import { bagUi, hudScale, type Input } from './input';
 import { FEATHER_COLORS, P_CASING, P_DEBRIS, P_DUST, P_FEATHER, P_FIRE, P_MUZZLE, P_RING, P_SMOKE, P_SPARK, P_STAR, TAU, type Container, type Enemy, type Game } from './game';
 import { drawScenery } from './scenery';
-import { weaponIconDataUrl } from './gear-icons';
+import { CONSUMABLE_EMOJI_TO_ID, consumableIconDataUrl, weaponIconDataUrl } from './gear-icons';
 
 const armorIconAtlasUrl = new URL('../assets/armor-icons.webp', import.meta.url).href;
 
@@ -536,6 +536,21 @@ export class Renderer {
       }
       this.ctx.drawImage(this.emoji('🦺'), x - size / 2, y - size / 2, size, size);
       return;
+    }
+    const consumableId = CONSUMABLE_EMOJI_TO_ID[icon];
+    if (consumableId) {
+      const key = `c_${consumableId}`;
+      let img = this.gearIconCache.get(key);
+      if (!img) {
+        img = new Image();
+        img.src = consumableIconDataUrl(consumableId);
+        this.gearIconCache.set(key, img);
+      }
+      if (img.complete && img.naturalWidth > 0) {
+        this.ctx.drawImage(img, x - size / 2, y - size / 2, size, size);
+        return;
+      }
+      // Image still loading: fall through to the emoji placeholder below.
     }
     this.ctx.drawImage(this.emoji(icon), x - size / 2, y - size / 2, size, size);
   }
@@ -2600,7 +2615,8 @@ export class Renderer {
         ctx.lineWidth = 3;
         ctx.beginPath(); ctx.arc(b.x, b.y, b.r - 3, -Math.PI / 2, -Math.PI / 2 + ring * TAU); ctx.stroke();
       }
-      this.txt(label, b.x, b.y + 1, (b.id === 'swap' ? 10 : 12) * u, '#f2efe6', 'center', 800);
+      if (b.id === 'grenade') this.drawIcon(label, b.x, b.y, b.r * 0.7);
+      else this.txt(label, b.x, b.y + 1, (b.id === 'swap' ? 10 : 12) * u, '#f2efe6', 'center', 800);
       if (badge) {
         ctx.fillStyle = '#ffd23f';
         ctx.beginPath(); ctx.arc(b.x + b.r * 0.72, b.y - b.r * 0.72, 8 * u, 0, TAU); ctx.fill();

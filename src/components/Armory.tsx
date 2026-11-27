@@ -16,6 +16,7 @@ import {
 import LobbyDialog from './LobbyDialog';
 import { cn } from '../utils/cn';
 import GearIcon from './GearIcon';
+import { CONSUMABLE_EMOJI_TO_ID, consumableIconDataUrl } from '../game/gear-icons';
 
 export type WarehouseAction =
   | { type: 'select'; slot: 'weapon' | 'armor'; gear?: GearItem }
@@ -140,12 +141,13 @@ export default function Armory({ save, onAction, onClose }: { save: SaveData; on
             <p className="text-xs leading-relaxed text-white/65">先在仓库买入并持有药品/投掷物，再勾选本次携带量；出击时从库存扣除，成功撤离后归还并加上路上搜到的补给。投掷物携带总数上限 {CONSUMABLE_LIMITS.totalThrowables}，库存无上限。</p>
             <ul className="grid max-h-[46vh] gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
               {supplyRows.map((row) => {
+                const consumableId = CONSUMABLE_EMOJI_TO_ID[row.icon];
                 const noStock = row.count <= row.carried;
                 const atMax = row.carried >= row.max || (row.key !== 'bandages' && row.key !== 'medkits' && throwableTotal >= CONSUMABLE_LIMITS.totalThrowables);
                 return (
                   <li key={row.key} className="space-y-2 rounded-lg border border-white/10 bg-black/15 p-2.5">
                     <div className="flex items-center gap-2">
-                      <span className="grid size-9 shrink-0 place-items-center rounded bg-white/5 text-xl">{row.icon}</span>
+                      <span className="grid size-9 shrink-0 place-items-center rounded bg-white/5">{consumableId ? <img className="size-7 object-contain" src={consumableIconDataUrl(consumableId)} alt="" draggable={false} /> : row.icon}</span>
                       <span className="min-w-0 flex-1">
                         <span className="block truncate text-sm font-bold text-[#ffe183]">{row.name} <span className="font-num text-xs text-white/60">库存 {row.count} · 携带 {row.carried}</span></span>
                         <span className="block truncate text-[11px] text-white/60">{row.desc} · 单价 ¥{fmtMoney(row.price)}</span>
